@@ -4,7 +4,7 @@ import { useAuth } from '../context/AuthContext';
 import { useClaims } from '../context/ClaimsContext';
 import { useToast } from '../context/ToastContext';
 import { insertClaim } from '../lib/supabase';
-import PartAutocomplete from '../components/PartAutocomplete';
+import PartSearchModal from '../components/PartSearchModal';
 
 const today = () => new Date().toISOString().slice(0, 10);
 
@@ -26,8 +26,9 @@ export default function NewClaim() {
   const { addClaim } = useClaims();
   const toast        = useToast();
   const navigate     = useNavigate();
-  const [form, setForm]      = useState(INITIAL);
-  const [submitting, setSub] = useState(false);
+  const [form, setForm]           = useState(INITIAL);
+  const [submitting, setSub]      = useState(false);
+  const [partSearchOpen, setPartSearchOpen] = useState(false);
 
   if (!user) return (
     <div>
@@ -116,20 +117,40 @@ export default function NewClaim() {
           <div className="form-card-title">📦 출고 정보</div>
           <div className="form-grid form-cols-4">
             <div className="form-group">
-              <label>품번 <span style={{ fontSize: 10, color: '#94a3b8' }}>(입력하면 자동완성)</span></label>
-              <PartAutocomplete
-                partNumber={form.part_number}
-                partName={form.part_name}
-                onSelect={handlePartSelect}
-              />
+              <label>품번</label>
+              <div style={{ display: 'flex', gap: 6 }}>
+                <input
+                  value={form.part_number}
+                  onChange={set('part_number')}
+                  placeholder="품번 입력"
+                  style={{ flex: 1 }}
+                />
+                <button
+                  type="button"
+                  className="btn btn-ghost btn-icon"
+                  title="품번/품명 검색"
+                  onClick={() => setPartSearchOpen(true)}
+                  style={{ flexShrink: 0 }}
+                >🔍</button>
+              </div>
             </div>
             <div className="form-group">
               <label>품명</label>
-              <input
-                placeholder="품번 선택 시 자동입력"
-                value={form.part_name}
-                onChange={set('part_name')}
-              />
+              <div style={{ display: 'flex', gap: 6 }}>
+                <input
+                  value={form.part_name}
+                  onChange={set('part_name')}
+                  placeholder="품명 입력"
+                  style={{ flex: 1 }}
+                />
+                <button
+                  type="button"
+                  className="btn btn-ghost btn-icon"
+                  title="품번/품명 검색"
+                  onClick={() => setPartSearchOpen(true)}
+                  style={{ flexShrink: 0 }}
+                >🔍</button>
+              </div>
             </div>
             <div className="form-group">
               <label>수량 (EA)</label>
@@ -167,6 +188,13 @@ export default function NewClaim() {
           </button>
         </div>
       </form>
+
+      {partSearchOpen && (
+        <PartSearchModal
+          onSelect={handlePartSelect}
+          onClose={() => setPartSearchOpen(false)}
+        />
+      )}
     </div>
   );
 }

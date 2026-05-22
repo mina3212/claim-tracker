@@ -111,8 +111,44 @@ export async function advanceClaim(claimId, currentStage, { stage_date, descript
   return { nextStage, entry };
 }
 
+export async function updateClaim(id, data) {
+  const { error } = await sb.from('claims').update(data).eq('id', id);
+  if (error) throw error;
+}
+
 export async function deleteClaim(id) {
   const { error } = await sb.from('claims').delete().eq('id', id);
+  if (error) throw error;
+}
+
+// ── Delete Requests ───────────────────────────────────────────
+export async function insertDeleteRequest(claimId, reason, user) {
+  const req = {
+    id: uid(),
+    claim_id: claimId,
+    requester_email: user?.email || '',
+    requester_name: user?.user_metadata?.name || user?.email || '',
+    reason,
+    status: 'pending',
+    created_at: new Date().toISOString(),
+  };
+  const { error } = await sb.from('delete_requests').insert(req);
+  if (error) throw error;
+  return req;
+}
+
+export async function fetchDeleteRequests() {
+  const { data, error } = await sb
+    .from('delete_requests')
+    .select('*')
+    .eq('status', 'pending')
+    .order('created_at');
+  if (error) throw error;
+  return data || [];
+}
+
+export async function resolveDeleteRequest(id, status) {
+  const { error } = await sb.from('delete_requests').update({ status }).eq('id', id);
   if (error) throw error;
 }
 

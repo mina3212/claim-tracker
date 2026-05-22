@@ -89,3 +89,23 @@ CREATE POLICY "parts_select" ON parts FOR SELECT USING (true);
 CREATE POLICY "parts_insert" ON parts FOR INSERT WITH CHECK (auth.role() = 'authenticated');
 CREATE POLICY "parts_update" ON parts FOR UPDATE USING (auth.role() = 'authenticated');
 CREATE POLICY "parts_delete" ON parts FOR DELETE USING (auth.role() = 'authenticated');
+
+-- 5. 삭제 요청 (일반 사용자 → 관리자)
+CREATE TABLE IF NOT EXISTS delete_requests (
+  id               TEXT PRIMARY KEY,
+  claim_id         TEXT REFERENCES claims(id) ON DELETE CASCADE,
+  requester_email  TEXT,
+  requester_name   TEXT,
+  reason           TEXT NOT NULL,
+  status           TEXT DEFAULT 'pending' CHECK (status IN ('pending','approved','rejected')),
+  created_at       TIMESTAMPTZ DEFAULT NOW()
+);
+
+ALTER TABLE delete_requests ENABLE ROW LEVEL SECURITY;
+
+-- 로그인 사용자는 삭제 요청 생성 가능
+CREATE POLICY "dr_insert" ON delete_requests FOR INSERT WITH CHECK (auth.role() = 'authenticated');
+-- 로그인 사용자는 전체 조회 가능 (관리자가 확인)
+CREATE POLICY "dr_select" ON delete_requests FOR SELECT USING (auth.role() = 'authenticated');
+-- 로그인 사용자는 상태 업데이트 가능 (관리자가 처리)
+CREATE POLICY "dr_update" ON delete_requests FOR UPDATE USING (auth.role() = 'authenticated');

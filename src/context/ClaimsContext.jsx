@@ -1,11 +1,12 @@
 import { createContext, useContext, useState, useEffect, useCallback } from 'react';
-import { fetchClaims, fetchAllStages } from '../lib/supabase';
+import { fetchClaims, fetchAllStages, fetchDeleteRequests } from '../lib/supabase';
 
 const ClaimsCtx = createContext(null);
 
 export function ClaimsProvider({ children }) {
-  const [claims, setClaims]   = useState([]);
-  const [stages, setStages]   = useState([]);
+  const [claims,         setClaims]         = useState([]);
+  const [stages,         setStages]         = useState([]);
+  const [deleteRequests, setDeleteRequests] = useState([]);
   const [loading, setLoading] = useState(true);
   const [dbReady, setDbReady] = useState(true);
 
@@ -17,11 +18,15 @@ export function ClaimsProvider({ children }) {
       setStages(s);
       setDbReady(true);
     } catch (e) {
-      if (e.code === '42P01') setDbReady(false); // table not found
+      if (e.code === '42P01') setDbReady(false);
       console.error('데이터 로드 실패:', e);
     } finally {
       setLoading(false);
     }
+    try {
+      const dr = await fetchDeleteRequests();
+      setDeleteRequests(dr);
+    } catch { /* delete_requests 테이블 미생성 시 무시 */ }
   }, []);
 
   useEffect(() => { refresh(); }, [refresh]);
@@ -44,10 +49,27 @@ export function ClaimsProvider({ children }) {
   const removeClaim = useCallback((id) => {
     setClaims(prev => prev.filter(c => c.id !== id));
     setStages(prev => prev.filter(s => s.claim_id !== id));
+    setDeleteRequests(prev => prev.filter(r => r.claim_id !== id));
+  }, []);
+
+  const updateClaimData = useCallback((id, data) => {
+    setClaims(prev => prev.map(c => c.id === id ? { ...c, ...data } : c));
+  }, []);
+
+  const addDeleteRequest = useCallback((req) => {
+    setDeleteRequests(prev => [...prev, req]);
+  }, []);
+
+  const resolveRequest = useCallback((id) => {
+    setDeleteRequests(prev => prev.filter(r => r.id !== id));
   }, []);
 
   return (
-    <ClaimsCtx.Provider value={{ claims, stages, loading, dbReady, refresh, getStagesFor, addClaim, updateClaimStage, removeClaim }}>
+    <ClaimsCtx.Provider value={{
+      claims, stages, deleteRequests, loading, dbReady,
+      refresh, getStagesFor, addClaim, updateClaimStage, updateClaimData,
+      removeClaim, addDeleteRequest, resolveRequest,
+    }}>
       {children}
     </ClaimsCtx.Provider>
   );

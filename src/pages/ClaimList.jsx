@@ -3,21 +3,23 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useClaims } from '../context/ClaimsContext';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
-import { deleteClaim, STAGES } from '../lib/supabase';
+import { deleteClaim, insertDeleteRequest, STAGES } from '../lib/supabase';
 import StageBadge from '../components/StageBadge';
+import DeleteRequestModal from '../components/DeleteRequestModal';
 
 export default function ClaimList() {
-  const { claims, loading, removeClaim } = useClaims();
+  const { claims, loading, removeClaim, deleteRequests, addDeleteRequest } = useClaims();
   const { user, isAdmin } = useAuth();
   const toast    = useToast();
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
 
-  const [search, setSearch]       = useState('');
-  const stageFilter   = searchParams.get('stage') || 'all';
+  const [search, setSearch]                 = useState('');
+  const [deleteReqTarget, setDeleteReqTarget] = useState(null); // { id, name }
+  const stageFilter    = searchParams.get('stage') || 'all';
   const customerFilter = searchParams.get('customer') || 'all';
 
-  const setStageFilter   = (v) => setSearchParams(prev => { const p = new URLSearchParams(prev); v === 'all' ? p.delete('stage') : p.set('stage', v); return p; });
+  const setStageFilter    = (v) => setSearchParams(prev => { const p = new URLSearchParams(prev); v === 'all' ? p.delete('stage') : p.set('stage', v); return p; });
   const setCustomerFilter = (v) => setSearchParams(prev => { const p = new URLSearchParams(prev); v === 'all' ? p.delete('customer') : p.set('customer', v); return p; });
 
   const customers = useMemo(() => [...new Set(claims.map(c => c.customer_name).filter(Boolean))].sort(), [claims]);
@@ -37,6 +39,11 @@ export default function ClaimList() {
       .sort((a, b) => (b.receipt_date || b.created_at || '') > (a.receipt_date || a.created_at || '') ? 1 : -1);
   }, [claims, search, stageFilter, customerFilter]);
 
+  const pendingIds = useMemo(() =>
+    new Set(deleteRequests.map(r => r.claim_id)),
+    [deleteRequests]
+  );
+
   const handleDelete = async (e, id, customerName) => {
     e.stopPropagation();
     if (!confirm(`"${customerName}" 클레임을 삭제하시겠습니까?\n처리 이력도 모두 삭제됩니다.`)) return;
@@ -49,6 +56,18 @@ export default function ClaimList() {
     }
   };
 
+  const openDeleteRequest = (e, id, name) => {
+    e.stopPropagation();
+    setDeleteReqTarget({ id, name });
+  };
+
+  const handleSubmitRequest = async (reason) => {
+    const req = await insertDeleteRequest(deleteReqTarget.id, reason, user);
+    addDeleteRequest(req);
+    toast('삭제 요청 완료', '관리자에게 삭제 요청이 전달되었습니다', 'success');
+    setDeleteReqTarget(null);
+  };
+
   if (loading) return <div className="loading">⏳ 불러오는 중...</div>;
 
   return (
@@ -58,7 +77,7 @@ export default function ClaimList() {
           <div className="page-title">클레임 목록</div>
           <div className="page-sub">총 {claims.length}건 · 검색결과 {filtered.length}건</div>
         </div>
-        <button className="btn btn-primary" onClick={() => navigate('/claims/new')}>➕ 클레임 접수</button>
+        {user && <button className="btn btn-primary" onClick={() => navigate('/claims/new')}>➕ 클레임 접수</button>}
       </div>
 
       <div className="filter-bar">
@@ -103,14 +122,19 @@ export default function ClaimList() {
                   <th>불량내용</th>
                   <th>현재 단계</th>
                   <th>영업담당</th>
-                  {isAdmin && <th></th>}
+                  {user && <th></th>}
                 </tr>
               </thead>
               <tbody>
                 {filtered.map(c => (
                   <tr key={c.id} className="clickable" onClick={() => navigate(`/claims/${c.id}`)}>
                     <td style={{ whiteSpace: 'nowrap' }}>{c.receipt_date || '-'}</td>
-                    <td><strong>{c.customer_name}</strong></td>
+                    <td>
+                      <strong>{c.customer_name}</strong>
+                      {isAdmin && pendingIds.has(c.id) && (
+                        <span title="삭제 요청 대기중" style={{ marginLeft: 6, fontSize: 11, color: '#f59e0b' }}>⚠️</span>
+                      )}
+                    </td>
                     <td className="mono">{c.part_number || '-'}</td>
                     <td>{c.part_name || '-'}</td>
                     <td style={{ textAlign: 'right' }}>
@@ -132,6 +156,18 @@ export default function ClaimList() {
                         >🗑</button>
                       </td>
                     )}
+                    {user && !isAdmin && (
+                      <td onClick={e => e.stopPropagation()}>
+                        <button
+                          className="btn btn-sm"
+                          title="삭제 요청"
+                          onClick={e => openDeleteRequest(e, c.id, c.customer_name)}
+                          style={{ fontSize: 11, color: '#c2410c', background: '#fff7ed', border: '1px solid #fed7aa', whiteSpace: 'nowrap' }}
+                        >
+                          삭제요청
+                        </button>
+                      </td>
+                    )}
                   </tr>
                 ))}
               </tbody>
@@ -139,6 +175,14 @@ export default function ClaimList() {
           </div>
         )}
       </div>
+
+      {deleteReqTarget && (
+        <DeleteRequestModal
+          claimName={deleteReqTarget.name}
+          onClose={() => setDeleteReqTarget(null)}
+          onSubmit={handleSubmitRequest}
+        />
+      )}
     </div>
   );
 }
