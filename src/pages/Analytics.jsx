@@ -1,6 +1,6 @@
 import { useMemo, useState, Fragment } from 'react';
 import { useNavigate } from 'react-router-dom';
-import * as XLSX from 'xlsx';
+import ExcelJS from 'exceljs';
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
   PieChart, Pie, Cell, Legend,
@@ -183,7 +183,7 @@ export default function Analytics() {
   const { claims, stages, loading } = useClaims();
   const { department } = useAuth();
   const navigate = useNavigate();
-  const isQualityTeam = department === '품질기술팀';
+  const isQualityTeam = department === '품질기술팀' || isAdmin;
 
   const [tab, setTab] = useState('고객사별');
   const [expandedKey, setExpandedKey] = useState(null);
@@ -348,50 +348,147 @@ export default function Analytics() {
   /* ── 인쇄 ── */
   const handlePrint = () => window.print();
 
-  /* ── 엑셀 내보내기 ── */
-  const handleExcel = () => {
-    const wb = XLSX.utils.book_new();
+  /* ── 엑셀 내보내기 (ExcelJS 스타일) ── */
+  const handleExcel = async () => {
+    const wb = new ExcelJS.Workbook();
+    wb.creator = 'AJW 클레임 관리시스템';
+    wb.created = new Date();
 
-    // 전체 클레임 시트
-    const claimRows = filteredClaims.map(c => ({
-      '접수일': c.receipt_date || '',
-      '고객사그룹': c.customer_group || '',
-      '고객사명': c.customer_name || '',
-      '품번': c.part_number || '',
-      '품명': c.part_name || '',
-      '품목유형': c.product_type || '',
-      '수량': c.quantity ?? '',
-      'LOT번호': c.lot_number || '',
-      '불량내용': c.defect_description || '',
-      '현재단계': c.current_stage || '',
-      '영업담당': c.sales_rep_name || '',
-    }));
-    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(claimRows), '전체클레임');
+    const HEADER_FILL = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1E293B' } };
+    const EVEN_FILL   = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF8FAFC' } };
+    const BORDER      = { top: { style: 'thin', color: { argb: 'FFE2E8F0' } }, left: { style: 'thin', color: { argb: 'FFE2E8F0' } }, bottom: { style: 'thin', color: { argb: 'FFE2E8F0' } }, right: { style: 'thin', color: { argb: 'FFE2E8F0' } } };
+    const HEADER_FONT = { bold: true, color: { argb: 'FFFFFFFF' }, size: 10, name: 'Malgun Gothic' };
+    const CELL_FONT   = { size: 10, name: 'Malgun Gothic' };
 
-    // 고객사별 시트
-    const custRows = customerAnalysis.map(a => ({
-      '고객사': a.name,
-      '전체': a.total,
-      '종결': a.closed,
-      '종결율(%)': a.closeRate,
-      '주요원인': a.topCause || '',
-      '최다품목': a.topPart || '',
-    }));
-    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(custRows), '고객사별');
+    const stageColor = { '접수': 'FF3B82F6', '1차 대응': 'FFF59E0B', '회수품 원인분석': 'FF8B5CF6', '조치': 'FFF97316', '종결': 'FF10B981' };
 
-    // 그룹별 시트
-    const grpRows = groupAnalysis.map(a => ({
-      '그룹': a.name,
-      '전체': a.total,
-      '종결': a.closed,
-      '종결율(%)': a.closeRate,
-      '주요원인': a.topCause || '',
-      '최다품목': a.topPart || '',
-    }));
-    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(grpRows), '그룹별');
+    function styleHeader(ws, cols) {
+      ws.columns = cols;
+      const headerRow = ws.getRow(1);
+      headerRow.height = 22;
+      headerRow.eachCell(cell => {
+        cell.fill = HEADER_FILL;
+        cell.font = HEADER_FONT;
+        cell.alignment = { vertical: 'middle', horizontal: 'center', wrapText: false };
+        cell.border = BORDER;
+      });
+    }
 
-    const dateTag = new Date().toISOString().slice(0, 10);
-    XLSX.writeFile(wb, `클레임분석_${dateTag}.xlsx`);
+    function styleDataRows(ws, startRow, endRow) {
+      for (let r = startRow; r <= endRow; r++) {
+        const row = ws.getRow(r);
+        row.height = 18;
+        row.eachCell({ includeEmpty: true }, cell => {
+          cell.font = CELL_FONT;
+          cell.border = BORDER;
+          cell.alignment = { vertical: 'middle', wrapText: false };
+          if (r % 2 === 0) cell.fill = EVEN_FILL;
+        });
+      }
+    }
+
+    // ── 시트 1: 전체 클레임 ──
+    const ws1 = wb.addWorksheet('📋 전체 클레임', { views: [{ state: 'frozen', ySplit: 1 }] });
+    styleHeader(ws1, [
+      { header: '접수일',     key: 'receipt_date',       width: 13 },
+      { header: '고객사 그룹', key: 'customer_group',     width: 13 },
+      { header: '고객사명',   key: 'customer_name',      width: 18 },
+      { header: '품번',       key: 'part_number',        width: 14 },
+      { header: '품명',       key: 'part_name',          width: 18 },
+      { header: '품목 유형',  key: 'product_type',       width: 13 },
+      { header: '수량 (EA)',  key: 'quantity',            width: 10 },
+      { header: 'LOT 번호',  key: 'lot_number',          width: 14 },
+      { header: '불량 내용', key: 'defect_description',  width: 40 },
+      { header: '현재 단계', key: 'current_stage',       width: 14 },
+      { header: '영업담당자', key: 'sales_rep_name',     width: 12 },
+    ]);
+    filteredClaims.forEach(c => {
+      ws1.addRow({
+        receipt_date: c.receipt_date || '',
+        customer_group: c.customer_group || '',
+        customer_name: c.customer_name || '',
+        part_number: c.part_number || '',
+        part_name: c.part_name || '',
+        product_type: c.product_type || '',
+        quantity: c.quantity ?? '',
+        lot_number: c.lot_number || '',
+        defect_description: c.defect_description || '',
+        current_stage: c.current_stage || '',
+        sales_rep_name: c.sales_rep_name || '',
+      });
+    });
+    styleDataRows(ws1, 2, filteredClaims.length + 1);
+    // 단계 컬럼 색상 적용
+    for (let r = 2; r <= filteredClaims.length + 1; r++) {
+      const cell = ws1.getCell(r, 10);
+      const argb = stageColor[cell.value] || 'FF64748B';
+      cell.font = { bold: true, color: { argb: 'FFFFFFFF' }, size: 9, name: 'Malgun Gothic' };
+      cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb } };
+      cell.alignment = { vertical: 'middle', horizontal: 'center' };
+    }
+    ws1.autoFilter = { from: 'A1', to: 'K1' };
+
+    // ── 시트 2: 고객사별 분석 ──
+    const ws2 = wb.addWorksheet('🏢 고객사별', { views: [{ state: 'frozen', ySplit: 1 }] });
+    styleHeader(ws2, [
+      { header: '고객사',    key: 'name',       width: 20 },
+      ...STAGES.map(s => ({ header: s, key: s, width: 10 })),
+      { header: '합계',     key: 'total',       width: 8 },
+      { header: '종결건수', key: 'closed',      width: 8 },
+      { header: '종결율(%)', key: 'closeRate',  width: 10 },
+      { header: '주요 원인', key: 'topCause',   width: 16 },
+      { header: '최다 품목', key: 'topPart',    width: 20 },
+    ]);
+    customerAnalysis.forEach(a => {
+      const row = { name: a.name, total: a.total, closed: a.closed, closeRate: a.closeRate + '%', topCause: a.topCause || '', topPart: a.topPart || '' };
+      STAGES.forEach(s => { row[s] = a.stageCnts[s] || 0; });
+      ws2.addRow(row);
+    });
+    styleDataRows(ws2, 2, customerAnalysis.length + 1);
+
+    // ── 시트 3: 그룹별 분석 ──
+    const ws3 = wb.addWorksheet('🗂 그룹별', { views: [{ state: 'frozen', ySplit: 1 }] });
+    styleHeader(ws3, [
+      { header: '그룹',     key: 'name',       width: 14 },
+      ...STAGES.map(s => ({ header: s, key: s, width: 10 })),
+      { header: '합계',     key: 'total',      width: 8 },
+      { header: '종결율(%)', key: 'closeRate', width: 10 },
+      { header: '주요 원인', key: 'topCause',  width: 16 },
+      { header: '최다 품목', key: 'topPart',   width: 20 },
+    ]);
+    groupAnalysis.forEach(a => {
+      const row = { name: a.name, total: a.total, closeRate: a.closeRate + '%', topCause: a.topCause || '', topPart: a.topPart || '' };
+      STAGES.forEach(s => { row[s] = a.stageCnts[s] || 0; });
+      ws3.addRow(row);
+    });
+    styleDataRows(ws3, 2, groupAnalysis.length + 1);
+
+    // ── 시트 4: 원인별 분석 ──
+    if (causeAnalysis.length > 0) {
+      const ws4 = wb.addWorksheet('🔍 원인별', { views: [{ state: 'frozen', ySplit: 1 }] });
+      styleHeader(ws4, [
+        { header: '원인',    key: 'name',  width: 16 },
+        { header: '건수',    key: 'value', width: 10 },
+        { header: '비율(%)', key: 'pct',   width: 10 },
+      ]);
+      const causeTotal = causeAnalysis.reduce((s, x) => s + x.value, 0);
+      causeAnalysis.forEach(c => {
+        ws4.addRow({ name: c.name, value: c.value, pct: causeTotal ? Math.round(c.value / causeTotal * 100) + '%' : '0%' });
+      });
+      styleDataRows(ws4, 2, causeAnalysis.length + 1);
+    }
+
+    // ── 다운로드 ──
+    const buffer = await wb.xlsx.writeBuffer();
+    const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `클레임분석_${new Date().toISOString().slice(0, 10)}.xlsx`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
   };
 
   /* ── 공통 테이블 헤더 스타일 ── */

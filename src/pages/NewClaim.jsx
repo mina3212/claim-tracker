@@ -5,6 +5,7 @@ import { useClaims } from '../context/ClaimsContext';
 import { useToast } from '../context/ToastContext';
 import { insertClaim, CUSTOMER_GROUPS, PRODUCT_TYPES } from '../lib/supabase';
 import PartSearchModal from '../components/PartSearchModal';
+import Tooltip from '../components/Tooltip';
 
 const today = () => new Date().toISOString().slice(0, 10);
 
@@ -48,6 +49,7 @@ export default function NewClaim() {
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (!form.customer_name.trim()) { toast('입력 오류', '고객사명을 입력하세요', 'error'); return; }
+    if (!form.part_number.trim() && !form.part_name.trim()) { toast('입력 오류', '품번 또는 품명을 입력하세요', 'error'); return; }
     if (!form.defect_description.trim()) { toast('입력 오류', '불량내용을 입력하세요', 'error'); return; }
 
     setSub(true);
@@ -163,21 +165,26 @@ export default function NewClaim() {
             </div>
             <div className="form-group form-span-4">
               <label>품목 유형</label>
-              <div style={{ display: 'flex', gap: 8 }}>
-                {PRODUCT_TYPES.map(t => (
-                  <button
-                    key={t} type="button"
-                    onClick={() => setForm(prev => ({ ...prev, product_type: prev.product_type === t ? '' : t }))}
-                    style={{
-                      padding: '6px 20px', borderRadius: 20, fontSize: 13, fontWeight: 600,
-                      cursor: 'pointer', border: '1.5px solid',
-                      background: form.product_type === t ? '#3b82f6' : '#fff',
-                      color: form.product_type === t ? '#fff' : '#64748b',
-                      borderColor: form.product_type === t ? '#3b82f6' : '#e2e8f0',
-                      transition: '.15s', fontFamily: 'inherit',
-                    }}
-                  >{t}</button>
-                ))}
+              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                {PRODUCT_TYPES.map(t => {
+                  const tips = { '수입품': '해외 수입 품목', '자체제작상품': 'AJW, SCON, AJP 직접생산품', '내수품': '국내 구매 품목' };
+                  return (
+                    <Tooltip key={t} text={tips[t]}>
+                      <button
+                        type="button"
+                        onClick={() => setForm(prev => ({ ...prev, product_type: prev.product_type === t ? '' : t }))}
+                        style={{
+                          padding: '6px 20px', borderRadius: 20, fontSize: 13, fontWeight: 600,
+                          cursor: 'pointer', border: '1.5px solid',
+                          background: form.product_type === t ? '#3b82f6' : '#fff',
+                          color: form.product_type === t ? '#fff' : '#64748b',
+                          borderColor: form.product_type === t ? '#3b82f6' : '#e2e8f0',
+                          transition: '.15s', fontFamily: 'inherit',
+                        }}
+                      >{t}</button>
+                    </Tooltip>
+                  );
+                })}
               </div>
             </div>
           </div>

@@ -4,6 +4,7 @@ import { useClaims } from '../context/ClaimsContext';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
 import { advanceClaim, deleteClaim, updateClaim, insertDeleteRequest, resolveDeleteRequest, STAGES, STAGE_ICONS, STAGE_COLORS, CUSTOMER_GROUPS, PRODUCT_TYPES } from '../lib/supabase';
+import Tooltip from '../components/Tooltip';
 import StageTracker from '../components/StageTracker';
 import StageBadge from '../components/StageBadge';
 import PartSearchModal from '../components/PartSearchModal';
@@ -576,19 +577,24 @@ export default function ClaimDetail() {
               </div>
               <div className="form-group form-span-4">
                 <label>품목 유형</label>
-                <div style={{ display: 'flex', gap: 8 }}>
-                  {PRODUCT_TYPES.map(t => (
-                    <button key={t} type="button"
-                      onClick={() => setEditForm(prev => ({ ...prev, product_type: prev.product_type === t ? '' : t }))}
-                      style={{
-                        padding: '5px 14px', borderRadius: 20, fontSize: 12, fontWeight: 600,
-                        cursor: 'pointer', border: '1.5px solid', fontFamily: 'inherit',
-                        background: editForm.product_type === t ? '#3b82f6' : '#fff',
-                        color: editForm.product_type === t ? '#fff' : '#64748b',
-                        borderColor: editForm.product_type === t ? '#3b82f6' : '#e2e8f0',
-                      }}
-                    >{t}</button>
-                  ))}
+                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                  {PRODUCT_TYPES.map(t => {
+                    const tips = { '수입품': '해외 수입 품목', '자체제작상품': 'AJW, SCON, AJP 직접생산품', '내수품': '국내 구매 품목' };
+                    return (
+                      <Tooltip key={t} text={tips[t]}>
+                        <button type="button"
+                          onClick={() => setEditForm(prev => ({ ...prev, product_type: prev.product_type === t ? '' : t }))}
+                          style={{
+                            padding: '5px 14px', borderRadius: 20, fontSize: 12, fontWeight: 600,
+                            cursor: 'pointer', border: '1.5px solid', fontFamily: 'inherit',
+                            background: editForm.product_type === t ? '#3b82f6' : '#fff',
+                            color: editForm.product_type === t ? '#fff' : '#64748b',
+                            borderColor: editForm.product_type === t ? '#3b82f6' : '#e2e8f0',
+                          }}
+                        >{t}</button>
+                      </Tooltip>
+                    );
+                  })}
                 </div>
               </div>
               <div className="form-group form-span-4">

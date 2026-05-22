@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Outlet, NavLink } from 'react-router-dom';
+import { Outlet, NavLink, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { signOut } from '../lib/supabase';
 import { useToast } from '../context/ToastContext';
@@ -15,10 +15,12 @@ const DEPT_COLORS = {
 export default function Layout() {
   const { user, displayName, department, isAdmin, saveName } = useAuth();
   const toast = useToast();
+  const navigate = useNavigate();
   const onlineUsers = usePresence(user, displayName, department);
 
   const [editingName, setEditingName] = useState(false);
   const [nameInput,   setNameInput]   = useState('');
+  const [mobileOpen,  setMobileOpen]  = useState(false);
 
   const handleLogout = async () => {
     if (!confirm('로그아웃 하시겠습니까?')) return;
@@ -39,15 +41,32 @@ export default function Layout() {
 
   const initial = (displayName || user?.email || '?').charAt(0).toUpperCase();
 
+  const closeMenu = () => setMobileOpen(false);
+
   return (
     <div className="app-layout">
-      <aside className="sidebar">
+      {/* 모바일 상단 바 */}
+      <div className="mobile-topbar no-print">
+        <button className="mobile-hamburger" onClick={() => setMobileOpen(true)}>☰</button>
+        <span style={{ color: '#fff', fontWeight: 700, fontSize: 15 }}>🚨 클레임 관리</span>
+        <button
+          className="btn btn-sm"
+          onClick={() => { navigate('/claims/new'); closeMenu(); }}
+          style={{ marginLeft: 'auto', background: '#3b82f6', color: '#fff', border: 'none', fontSize: 12, padding: '5px 10px' }}
+        >➕ 접수</button>
+      </div>
+
+      {/* 모바일 오버레이 */}
+      {mobileOpen && <div className="mobile-overlay" onClick={closeMenu} />}
+
+      <aside className={`sidebar${mobileOpen ? ' mobile-open' : ''}`}>
+        <button className="mobile-close-btn" onClick={closeMenu}>✕</button>
         <div className="sidebar-logo">
           <h1>🚨 클레임 관리</h1>
           <p>고객사 클레임 트래커</p>
         </div>
 
-        <nav>
+        <nav onClick={closeMenu}>
           <NavLink to="/" end className={({ isActive }) => `nav-item${isActive ? ' active' : ''}`}>
             <span>🏠</span> 대시보드
           </NavLink>
