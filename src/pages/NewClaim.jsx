@@ -3,12 +3,13 @@ import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useClaims } from '../context/ClaimsContext';
 import { useToast } from '../context/ToastContext';
-import { insertClaim } from '../lib/supabase';
+import { insertClaim, CUSTOMER_GROUPS, PRODUCT_TYPES } from '../lib/supabase';
 import PartSearchModal from '../components/PartSearchModal';
 
 const today = () => new Date().toISOString().slice(0, 10);
 
 const INITIAL = {
+  customer_group: '',
   customer_name: '',
   occurrence_date: '',
   receipt_date: today(),
@@ -16,6 +17,7 @@ const INITIAL = {
   sales_rep_contact: '',
   part_number: '',
   part_name: '',
+  product_type: '',
   quantity: '',
   lot_number: '',
   defect_description: '',
@@ -54,6 +56,8 @@ export default function NewClaim() {
         ...form,
         quantity:           form.quantity !== '' ? parseInt(form.quantity) : null,
         customer_name:      form.customer_name.trim(),
+        customer_group:     form.customer_group || null,
+        product_type:       form.product_type || null,
         defect_description: form.defect_description.trim(),
         sales_rep_name:     form.sales_rep_name.trim() || null,
         sales_rep_contact:  form.sales_rep_contact.trim() || null,
@@ -89,6 +93,25 @@ export default function NewClaim() {
         <div className="form-card" style={{ marginBottom: 16 }}>
           <div className="form-card-title">📌 접수 기본 정보</div>
           <div className="form-grid form-cols-4">
+            <div className="form-group form-span-4">
+              <label>고객사 그룹</label>
+              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                {CUSTOMER_GROUPS.map(g => (
+                  <button
+                    key={g} type="button"
+                    onClick={() => setForm(prev => ({ ...prev, customer_group: prev.customer_group === g ? '' : g }))}
+                    style={{
+                      padding: '6px 16px', borderRadius: 20, fontSize: 13, fontWeight: 600,
+                      cursor: 'pointer', border: '1.5px solid',
+                      background: form.customer_group === g ? '#0f172a' : '#fff',
+                      color: form.customer_group === g ? '#fff' : '#64748b',
+                      borderColor: form.customer_group === g ? '#0f172a' : '#e2e8f0',
+                      transition: '.15s', fontFamily: 'inherit',
+                    }}
+                  >{g}</button>
+                ))}
+              </div>
+            </div>
             <div className="form-group form-span-2">
               <label>고객사명 <span className="required-star">*</span></label>
               <input placeholder="예: ABC전자" value={form.customer_name} onChange={set('customer_name')} required />
@@ -119,37 +142,15 @@ export default function NewClaim() {
             <div className="form-group">
               <label>품번</label>
               <div style={{ display: 'flex', gap: 6 }}>
-                <input
-                  value={form.part_number}
-                  onChange={set('part_number')}
-                  placeholder="품번 입력"
-                  style={{ flex: 1 }}
-                />
-                <button
-                  type="button"
-                  className="btn btn-ghost btn-icon"
-                  title="품번/품명 검색"
-                  onClick={() => setPartSearchOpen(true)}
-                  style={{ flexShrink: 0 }}
-                >🔍</button>
+                <input value={form.part_number} onChange={set('part_number')} placeholder="품번 입력" style={{ flex: 1 }} />
+                <button type="button" className="btn btn-ghost btn-icon" title="품번/품명 검색" onClick={() => setPartSearchOpen(true)} style={{ flexShrink: 0 }}>🔍</button>
               </div>
             </div>
             <div className="form-group">
               <label>품명</label>
               <div style={{ display: 'flex', gap: 6 }}>
-                <input
-                  value={form.part_name}
-                  onChange={set('part_name')}
-                  placeholder="품명 입력"
-                  style={{ flex: 1 }}
-                />
-                <button
-                  type="button"
-                  className="btn btn-ghost btn-icon"
-                  title="품번/품명 검색"
-                  onClick={() => setPartSearchOpen(true)}
-                  style={{ flexShrink: 0 }}
-                >🔍</button>
+                <input value={form.part_name} onChange={set('part_name')} placeholder="품명 입력" style={{ flex: 1 }} />
+                <button type="button" className="btn btn-ghost btn-icon" title="품번/품명 검색" onClick={() => setPartSearchOpen(true)} style={{ flexShrink: 0 }}>🔍</button>
               </div>
             </div>
             <div className="form-group">
@@ -159,6 +160,25 @@ export default function NewClaim() {
             <div className="form-group">
               <label>LOT 번호</label>
               <input placeholder="LOT" value={form.lot_number} onChange={set('lot_number')} />
+            </div>
+            <div className="form-group form-span-4">
+              <label>품목 유형</label>
+              <div style={{ display: 'flex', gap: 8 }}>
+                {PRODUCT_TYPES.map(t => (
+                  <button
+                    key={t} type="button"
+                    onClick={() => setForm(prev => ({ ...prev, product_type: prev.product_type === t ? '' : t }))}
+                    style={{
+                      padding: '6px 20px', borderRadius: 20, fontSize: 13, fontWeight: 600,
+                      cursor: 'pointer', border: '1.5px solid',
+                      background: form.product_type === t ? '#3b82f6' : '#fff',
+                      color: form.product_type === t ? '#fff' : '#64748b',
+                      borderColor: form.product_type === t ? '#3b82f6' : '#e2e8f0',
+                      transition: '.15s', fontFamily: 'inherit',
+                    }}
+                  >{t}</button>
+                ))}
+              </div>
             </div>
           </div>
         </div>

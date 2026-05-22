@@ -22,9 +22,11 @@ CREATE TABLE IF NOT EXISTS profiles (
 -- 2. 클레임 테이블
 CREATE TABLE IF NOT EXISTS claims (
   id                 TEXT PRIMARY KEY,
+  customer_group     TEXT,              -- KT / LG / SK / 해외고객사 / 온라인몰 / 기타
   customer_name      TEXT NOT NULL,
   part_number        TEXT,
   part_name          TEXT,
+  product_type       TEXT,              -- 수입품 / 자체제작상품 / 내수품
   quantity           INTEGER,
   lot_number         TEXT,
   defect_description TEXT,
@@ -36,6 +38,10 @@ CREATE TABLE IF NOT EXISTS claims (
                           CHECK (current_stage IN ('접수','1차 대응','회수품 원인분석','조치','종결')),
   created_at         TIMESTAMPTZ DEFAULT NOW()
 );
+
+-- ※ 기존 테이블에 컬럼 추가 (이미 claims 테이블이 있는 경우)
+-- ALTER TABLE claims ADD COLUMN IF NOT EXISTS customer_group TEXT;
+-- ALTER TABLE claims ADD COLUMN IF NOT EXISTS product_type TEXT;
 
 -- 3. 처리 단계 이력 (작업자 추적 포함)
 CREATE TABLE IF NOT EXISTS claim_stages (

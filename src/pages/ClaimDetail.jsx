@@ -3,7 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { useClaims } from '../context/ClaimsContext';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
-import { advanceClaim, deleteClaim, updateClaim, insertDeleteRequest, resolveDeleteRequest, STAGES, STAGE_ICONS, STAGE_COLORS } from '../lib/supabase';
+import { advanceClaim, deleteClaim, updateClaim, insertDeleteRequest, resolveDeleteRequest, STAGES, STAGE_ICONS, STAGE_COLORS, CUSTOMER_GROUPS, PRODUCT_TYPES } from '../lib/supabase';
 import StageTracker from '../components/StageTracker';
 import StageBadge from '../components/StageBadge';
 import PartSearchModal from '../components/PartSearchModal';
@@ -150,6 +150,7 @@ export default function ClaimDetail() {
   /* ── 수정 모드 시작 ── */
   const startEdit = () => {
     setEditForm({
+      customer_group:     claim.customer_group || '',
       customer_name:      claim.customer_name || '',
       occurrence_date:    claim.occurrence_date || '',
       receipt_date:       claim.receipt_date || '',
@@ -157,6 +158,7 @@ export default function ClaimDetail() {
       sales_rep_contact:  claim.sales_rep_contact || '',
       part_number:        claim.part_number || '',
       part_name:          claim.part_name || '',
+      product_type:       claim.product_type || '',
       quantity:           claim.quantity != null ? String(claim.quantity) : '',
       lot_number:         claim.lot_number || '',
       defect_description: claim.defect_description || '',
@@ -173,6 +175,7 @@ export default function ClaimDetail() {
     setSaving(true);
     try {
       const payload = {
+        customer_group:     editForm.customer_group || null,
         customer_name:      editForm.customer_name.trim(),
         occurrence_date:    editForm.occurrence_date || null,
         receipt_date:       editForm.receipt_date || null,
@@ -180,6 +183,7 @@ export default function ClaimDetail() {
         sales_rep_contact:  editForm.sales_rep_contact.trim() || null,
         part_number:        editForm.part_number.trim() || null,
         part_name:          editForm.part_name.trim() || null,
+        product_type:       editForm.product_type || null,
         quantity:           editForm.quantity !== '' ? parseInt(editForm.quantity) : null,
         lot_number:         editForm.lot_number.trim() || null,
         defect_description: editForm.defect_description.trim(),
@@ -511,6 +515,23 @@ export default function ClaimDetail() {
         {editMode ? (
           <div>
             <div className="form-grid form-cols-4" style={{ marginBottom: 12 }}>
+              <div className="form-group form-span-4">
+                <label>고객사 그룹</label>
+                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                  {CUSTOMER_GROUPS.map(g => (
+                    <button key={g} type="button"
+                      onClick={() => setEditForm(prev => ({ ...prev, customer_group: prev.customer_group === g ? '' : g }))}
+                      style={{
+                        padding: '5px 14px', borderRadius: 20, fontSize: 12, fontWeight: 600,
+                        cursor: 'pointer', border: '1.5px solid', fontFamily: 'inherit',
+                        background: editForm.customer_group === g ? '#0f172a' : '#fff',
+                        color: editForm.customer_group === g ? '#fff' : '#64748b',
+                        borderColor: editForm.customer_group === g ? '#0f172a' : '#e2e8f0',
+                      }}
+                    >{g}</button>
+                  ))}
+                </div>
+              </div>
               <div className="form-group form-span-2">
                 <label>고객사명 <span className="required-star">*</span></label>
                 <input value={editForm.customer_name} onChange={setEF('customer_name')} placeholder="고객사명" />
@@ -554,6 +575,23 @@ export default function ClaimDetail() {
                 <input value={editForm.lot_number} onChange={setEF('lot_number')} placeholder="LOT" />
               </div>
               <div className="form-group form-span-4">
+                <label>품목 유형</label>
+                <div style={{ display: 'flex', gap: 8 }}>
+                  {PRODUCT_TYPES.map(t => (
+                    <button key={t} type="button"
+                      onClick={() => setEditForm(prev => ({ ...prev, product_type: prev.product_type === t ? '' : t }))}
+                      style={{
+                        padding: '5px 14px', borderRadius: 20, fontSize: 12, fontWeight: 600,
+                        cursor: 'pointer', border: '1.5px solid', fontFamily: 'inherit',
+                        background: editForm.product_type === t ? '#3b82f6' : '#fff',
+                        color: editForm.product_type === t ? '#fff' : '#64748b',
+                        borderColor: editForm.product_type === t ? '#3b82f6' : '#e2e8f0',
+                      }}
+                    >{t}</button>
+                  ))}
+                </div>
+              </div>
+              <div className="form-group form-span-4">
                 <label>불량 내용 <span className="required-star">*</span></label>
                 <textarea rows={3} value={editForm.defect_description} onChange={setEF('defect_description')} placeholder="불량 내용을 상세하게 입력하세요" style={{ resize: 'vertical', width: '100%' }} />
               </div>
@@ -562,12 +600,14 @@ export default function ClaimDetail() {
         ) : (
           <div className="info-grid">
             {[
+              { label: '고객사 그룹',   value: claim.customer_group || '-', chip: claim.customer_group },
               { label: '고객사',        value: claim.customer_name },
               { label: '발생일',        value: claim.occurrence_date || '-' },
               { label: '접수일',        value: claim.receipt_date || '-' },
               { label: '현재 단계',     value: null, badge: true },
               { label: '품번',          value: claim.part_number || '-', mono: true },
               { label: '품명',          value: claim.part_name || '-' },
+              { label: '품목 유형',     value: claim.product_type || '-', typeChip: claim.product_type },
               { label: '수량',          value: claim.quantity != null ? Number(claim.quantity).toLocaleString() + ' EA' : '-' },
               { label: 'LOT 번호',      value: claim.lot_number || '-', mono: true },
               { label: '영업담당자',    value: claim.sales_rep_name || '-' },
@@ -578,7 +618,11 @@ export default function ClaimDetail() {
                 <span className="info-label">{item.label}</span>
                 {item.badge
                   ? <StageBadge stage={claim.current_stage} size="sm" />
-                  : <span className={`info-value${item.mono ? ' mono' : ''}`}>{item.value}</span>}
+                  : item.chip
+                    ? <span style={{ background: '#0f172a', color: '#fff', padding: '2px 10px', borderRadius: 12, fontSize: 12, fontWeight: 600 }}>{item.chip}</span>
+                    : item.typeChip
+                      ? <span style={{ background: '#dbeafe', color: '#1e40af', padding: '2px 10px', borderRadius: 12, fontSize: 12, fontWeight: 600 }}>{item.typeChip}</span>
+                      : <span className={`info-value${item.mono ? ' mono' : ''}`}>{item.value}</span>}
               </div>
             ))}
           </div>

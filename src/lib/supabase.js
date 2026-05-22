@@ -16,6 +16,9 @@ export const STAGE_COLORS = {
   '종결':           { bg: '#d1fae5', text: '#065f46', dot: '#10b981' },
 };
 
+export const CUSTOMER_GROUPS = ['KT', 'LG', 'SK', '해외고객사', '온라인몰', '기타'];
+export const PRODUCT_TYPES   = ['수입품', '자체제작상품', '내수품'];
+
 export const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
 
 // ── Auth ──────────────────────────────────────────────────────
