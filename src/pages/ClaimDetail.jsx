@@ -9,6 +9,8 @@ import StageBadge from '../components/StageBadge';
 import PartSearchModal from '../components/PartSearchModal';
 import DeleteRequestModal from '../components/DeleteRequestModal';
 
+const CAUSES = ['사용자 과실', '생산공정', '제품불량', '구조불량', '배송오류', '기타'];
+
 export default function ClaimDetail() {
   const { id }   = useParams();
   const navigate = useNavigate();
@@ -16,14 +18,24 @@ export default function ClaimDetail() {
   const { user, isAdmin } = useAuth();
   const toast = useToast();
 
+  /* ── 단계 진행 공통 상태 ── */
   const [advDate,    setAdvDate]    = useState(new Date().toISOString().slice(0, 10));
   const [advHandler, setAdvHandler] = useState('');
   const [advDesc,    setAdvDesc]    = useState('');
   const [advancing,  setAdvancing]  = useState(false);
 
-  const [editMode, setEditMode]           = useState(false);
-  const [editForm, setEditForm]           = useState(null);
-  const [saving,   setSaving]             = useState(false);
+  /* ── 회수품 원인분석 전용 상태 ── */
+  const [selectedCauses,   setSelectedCauses]   = useState([]);
+  const [etcDetail,        setEtcDetail]        = useState('');
+  const [analysisDetail,   setAnalysisDetail]   = useState('');
+
+  /* ── 조치 단계 전용 상태 ── */
+  const [preventionMeasure, setPreventionMeasure] = useState('');
+
+  /* ── 수정 모드 상태 ── */
+  const [editMode, setEditMode]             = useState(false);
+  const [editForm, setEditForm]             = useState(null);
+  const [saving,   setSaving]               = useState(false);
   const [partSearchOpen, setPartSearchOpen] = useState(false);
   const [deleteReqOpen,  setDeleteReqOpen]  = useState(false);
 
@@ -41,21 +53,79 @@ export default function ClaimDetail() {
   const currentIdx = STAGES.indexOf(claim.current_stage);
   const isClosed   = claim.current_stage === '종결';
   const nextStage  = !isClosed ? STAGES[currentIdx + 1] : null;
-
-  // 이 클레임에 대한 대기 중인 삭제 요청
   const pendingReqs = deleteRequests.filter(r => r.claim_id === id);
+
+  /* ── 원인 체크박스 토글 ── */
+  const toggleCause = (cause) => {
+    setSelectedCauses(prev =>
+      prev.includes(cause) ? prev.filter(c => c !== cause) : [...prev, cause]
+    );
+    if (cause === '기타') setEtcDetail('');
+  };
 
   /* ── 단계 진행 ── */
   const handleAdvance = async () => {
+    // 1차 대응 → 회수품 원인분석: 처리내용 필수
+    if (claim.current_stage === '1차 대응') {
+      if (!advDesc.trim()) {
+        toast('입력 필요', '처리 내용을 입력해야 다음 단계로 진행할 수 있습니다', 'error');
+        return;
+      }
+    }
+
+    // 회수품 원인분석 → 조치: 원인 선택 + 상세내용 필수
+    if (claim.current_stage === '회수품 원인분석') {
+      if (selectedCauses.length === 0) {
+        toast('입력 필요', '원인 분석 항목을 하나 이상 선택하세요', 'error');
+        return;
+      }
+      if (selectedCauses.includes('기타') && !etcDetail.trim()) {
+        toast('입력 필요', '기타 원인의 구체적인 내용을 입력하세요', 'error');
+        return;
+      }
+      if (!analysisDetail.trim()) {
+        toast('입력 필요', '상세 내용은 필수 입력 항목입니다', 'error');
+        return;
+      }
+    }
+
+    // 조치 → 종결: 처리내용 + 재발방지대책 필수
+    if (claim.current_stage === '조치') {
+      if (!advDesc.trim()) {
+        toast('입력 필요', '처리 내용을 입력해야 종결로 진행할 수 있습니다', 'error');
+        return;
+      }
+      if (!preventionMeasure.trim()) {
+        toast('입력 필요', '재발방지대책을 입력해야 종결로 진행할 수 있습니다', 'error');
+        return;
+      }
+    }
+
     setAdvancing(true);
     try {
+      let description = advDesc;
+      if (claim.current_stage === '회수품 원인분석') {
+        const causeStr = selectedCauses
+          .map(c => c === '기타' ? `기타(${etcDetail.trim()})` : c)
+          .join(', ');
+        description = `[원인] ${causeStr}\n[상세] ${analysisDetail.trim()}`;
+      }
+      if (claim.current_stage === '조치') {
+        description = `[조치내용] ${advDesc.trim()}\n[재발방지] ${preventionMeasure.trim()}`;
+      }
+
       const { nextStage: ns, entry } = await advanceClaim(
         id, claim.current_stage,
-        { stage_date: advDate, description: advDesc, handler: advHandler || user?.displayName || '' },
+        { stage_date: advDate, description, handler: advHandler || user?.displayName || '' },
         user
       );
       updateClaimStage(id, ns, entry);
-      setAdvDesc(''); setAdvHandler('');
+      setAdvDesc('');
+      setAdvHandler('');
+      setSelectedCauses([]);
+      setEtcDetail('');
+      setAnalysisDetail('');
+      setPreventionMeasure('');
       toast(`"${ns}"으로 진행 완료`, '', 'success');
     } catch (err) {
       toast('진행 실패', err.message, 'error');
@@ -158,6 +228,212 @@ export default function ClaimDetail() {
     }
   };
 
+  /* ── 단계 진행 폼 렌더 ── */
+  const renderAdvanceForm = () => {
+    const isFirstResponse  = claim.current_stage === '1차 대응';
+    const isCauseAnalysis  = claim.current_stage === '회수품 원인분석';
+    const isAction         = claim.current_stage === '조치';
+    const hasEtc           = selectedCauses.includes('기타');
+
+    return (
+      <div className="advance-section">
+        <div style={{ fontSize: 13, fontWeight: 600, color: '#0f172a', marginBottom: 12 }}>
+          {STAGE_ICONS[currentIdx + 1]}&nbsp;
+          <span style={{ color: '#3b82f6' }}>{nextStage}</span> 단계로 진행
+        </div>
+
+        {/* 공통: 처리일 + 담당자 */}
+        <div className="form-grid form-cols-2" style={{ marginBottom: 12 }}>
+          <div className="form-group">
+            <label>처리일</label>
+            <input type="date" value={advDate} onChange={e => setAdvDate(e.target.value)} />
+          </div>
+          <div className="form-group">
+            <label>
+              담당자
+              <span style={{ fontSize: 10, color: '#94a3b8', marginLeft: 6, fontWeight: 400 }}>
+                (비우면 로그인 이름 자동 기록)
+              </span>
+            </label>
+            <input
+              placeholder={user?.displayName || user?.email}
+              value={advHandler}
+              onChange={e => setAdvHandler(e.target.value)}
+            />
+          </div>
+        </div>
+
+        {/* ── 회수품 원인분석 전용 UI ── */}
+        {isCauseAnalysis ? (
+          <div>
+            {/* 원인 체크박스 */}
+            <div className="form-group" style={{ marginBottom: 12 }}>
+              <label style={{ display: 'block', marginBottom: 8 }}>
+                원인 분류 <span className="required-star">*</span>
+                <span style={{ fontSize: 11, color: '#94a3b8', fontWeight: 400, marginLeft: 6 }}>
+                  (복수 선택 가능)
+                </span>
+              </label>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+                {CAUSES.map(cause => {
+                  const checked = selectedCauses.includes(cause);
+                  return (
+                    <label
+                      key={cause}
+                      style={{
+                        display: 'flex', alignItems: 'center', gap: 6,
+                        padding: '6px 12px', borderRadius: 8, cursor: 'pointer',
+                        border: `1px solid ${checked ? '#3b82f6' : '#e2e8f0'}`,
+                        background: checked ? '#eff6ff' : '#f8fafc',
+                        color: checked ? '#1e40af' : '#475569',
+                        fontWeight: checked ? 600 : 400,
+                        fontSize: 13, transition: '.15s', userSelect: 'none',
+                      }}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={checked}
+                        onChange={() => toggleCause(cause)}
+                        style={{ display: 'none' }}
+                      />
+                      {checked ? '✓ ' : ''}{cause}
+                    </label>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* 기타 상세 입력 */}
+            {hasEtc && (
+              <div className="form-group" style={{ marginBottom: 12 }}>
+                <label>
+                  기타 원인 상세 <span className="required-star">*</span>
+                </label>
+                <input
+                  autoFocus
+                  placeholder="기타 원인을 구체적으로 입력하세요"
+                  value={etcDetail}
+                  onChange={e => setEtcDetail(e.target.value)}
+                  style={{ borderColor: etcDetail.trim() ? '#e2e8f0' : '#fca5a5' }}
+                />
+              </div>
+            )}
+
+            {/* 상세 내용 (필수) */}
+            <div className="form-group" style={{ marginBottom: 12 }}>
+              <label>
+                상세 내용 <span className="required-star">*</span>
+              </label>
+              <textarea
+                rows={4}
+                placeholder="원인 분석 결과를 상세하게 작성하세요 (필수)"
+                value={analysisDetail}
+                onChange={e => setAnalysisDetail(e.target.value)}
+                style={{
+                  resize: 'vertical', width: '100%',
+                  borderColor: analysisDetail.trim() ? '#e2e8f0' : '#fca5a5',
+                }}
+              />
+            </div>
+          </div>
+        ) : isAction ? (
+          /* ── 조치 단계: 처리내용 + 재발방지대책 ── */
+          <div>
+            <div className="form-group" style={{ marginBottom: 12 }}>
+              <label>처리 내용 <span className="required-star">*</span></label>
+              <textarea
+                rows={3}
+                placeholder="조치 내용을 상세하게 입력하세요 (필수)"
+                value={advDesc}
+                onChange={e => setAdvDesc(e.target.value)}
+                style={{
+                  resize: 'vertical', width: '100%',
+                  borderColor: !advDesc.trim() ? '#fca5a5' : '#e2e8f0',
+                }}
+              />
+            </div>
+            <div className="form-group" style={{ marginBottom: 12 }}>
+              <label>재발방지대책 <span className="required-star">*</span></label>
+              <textarea
+                rows={3}
+                placeholder="향후 재발을 방지하기 위한 대책을 입력하세요 (필수)"
+                value={preventionMeasure}
+                onChange={e => setPreventionMeasure(e.target.value)}
+                style={{
+                  resize: 'vertical', width: '100%',
+                  borderColor: !preventionMeasure.trim() ? '#fca5a5' : '#e2e8f0',
+                }}
+              />
+            </div>
+          </div>
+        ) : (
+          /* ── 그 외 단계: 처리 내용 ── */
+          <div className="form-group" style={{ marginBottom: 12 }}>
+            <label>
+              처리 내용
+              {isFirstResponse && <span className="required-star"> *</span>}
+              {!isFirstResponse && (
+                <span style={{ fontSize: 10, color: '#94a3b8', fontWeight: 400, marginLeft: 6 }}>(선택)</span>
+              )}
+            </label>
+            <input
+              placeholder={isFirstResponse ? '처리 내용을 입력하세요 (필수)' : '처리 내용을 입력하세요'}
+              value={advDesc}
+              onChange={e => setAdvDesc(e.target.value)}
+              style={{ borderColor: isFirstResponse && !advDesc.trim() ? '#fca5a5' : '#e2e8f0' }}
+            />
+            {isFirstResponse && !advDesc.trim() && (
+              <div style={{ fontSize: 11, color: '#ef4444', marginTop: 4 }}>
+                처리 내용을 입력해야 다음 단계로 진행할 수 있습니다
+              </div>
+            )}
+          </div>
+        )}
+
+        <div className="form-actions">
+          <button className="btn btn-success" onClick={handleAdvance} disabled={advancing}>
+            {advancing ? '처리 중...' : `→ ${nextStage}으로 진행`}
+          </button>
+        </div>
+      </div>
+    );
+  };
+
+  /* ── 이력 항목 렌더 (원인분석 포맷 파싱) ── */
+  const renderDescription = (desc) => {
+    if (!desc) return null;
+    if (desc.startsWith('[원인]') || desc.startsWith('[조치내용]')) {
+      const lines = desc.split('\n');
+      return (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+          {lines.map((line, i) => {
+            const isOrigin     = line.startsWith('[원인]');
+            const isDetail     = line.startsWith('[상세]');
+            const isAction     = line.startsWith('[조치내용]');
+            const isPrevention = line.startsWith('[재발방지]');
+            const label = isOrigin ? '원인' : isDetail ? '상세' : isAction ? '조치' : isPrevention ? '재발방지' : null;
+            const text  = label ? line.replace(/^\[(원인|상세|조치내용|재발방지)\]\s*/, '') : line;
+            const bg    = isOrigin ? '#dbeafe' : isDetail ? '#f0fdf4' : isAction ? '#fff7ed' : '#fdf4ff';
+            const color = isOrigin ? '#1e40af' : isDetail ? '#166534' : isAction ? '#c2410c' : '#7e22ce';
+            return (
+              <div key={i} style={{ display: 'flex', gap: 6, alignItems: 'flex-start' }}>
+                {label && (
+                  <span style={{
+                    fontSize: 10, fontWeight: 700, padding: '1px 6px',
+                    borderRadius: 4, flexShrink: 0, marginTop: 1,
+                    background: bg, color,
+                  }}>{label}</span>
+                )}
+                <span>{text}</span>
+              </div>
+            );
+          })}
+        </div>
+      );
+    }
+    return <div className="tl-desc">{desc}</div>;
+  };
+
   return (
     <div>
       {/* 상단 버튼 바 */}
@@ -194,28 +470,18 @@ export default function ClaimDetail() {
 
       {/* 관리자용 삭제 요청 패널 */}
       {isAdmin && pendingReqs.length > 0 && (
-        <div style={{
-          background: '#fffbeb', border: '1px solid #fcd34d', borderRadius: 10,
-          padding: '14px 16px', marginBottom: 16,
-        }}>
+        <div style={{ background: '#fffbeb', border: '1px solid #fcd34d', borderRadius: 10, padding: '14px 16px', marginBottom: 16 }}>
           <div style={{ fontSize: 13, fontWeight: 700, color: '#92400e', marginBottom: 10 }}>
             ⚠️ 삭제 요청 {pendingReqs.length}건 (처리 대기중)
           </div>
           {pendingReqs.map(req => (
-            <div key={req.id} style={{
-              background: '#fff', border: '1px solid #fde68a', borderRadius: 8,
-              padding: '10px 14px', display: 'flex', alignItems: 'flex-start',
-              gap: 12, marginBottom: 8,
-            }}>
+            <div key={req.id} style={{ background: '#fff', border: '1px solid #fde68a', borderRadius: 8, padding: '10px 14px', display: 'flex', alignItems: 'flex-start', gap: 12, marginBottom: 8 }}>
               <div style={{ flex: 1 }}>
                 <div style={{ fontSize: 12, color: '#64748b', marginBottom: 4 }}>
                   요청자: <strong>{req.requester_name || req.requester_email}</strong>
                   &nbsp;·&nbsp;{req.created_at ? new Date(req.created_at).toLocaleDateString('ko-KR') : ''}
                 </div>
-                <div style={{
-                  fontSize: 13, color: '#7c3aed',
-                  background: '#f5f3ff', padding: '6px 10px', borderRadius: 6,
-                }}>
+                <div style={{ fontSize: 13, color: '#7c3aed', background: '#f5f3ff', padding: '6px 10px', borderRadius: 6 }}>
                   "{req.reason}"
                 </div>
               </div>
@@ -243,7 +509,6 @@ export default function ClaimDetail() {
         </div>
 
         {editMode ? (
-          /* ── 수정 폼 ── */
           <div>
             <div className="form-grid form-cols-4" style={{ marginBottom: 12 }}>
               <div className="form-group form-span-2">
@@ -290,18 +555,11 @@ export default function ClaimDetail() {
               </div>
               <div className="form-group form-span-4">
                 <label>불량 내용 <span className="required-star">*</span></label>
-                <textarea
-                  rows={3}
-                  value={editForm.defect_description}
-                  onChange={setEF('defect_description')}
-                  placeholder="불량 내용을 상세하게 입력하세요"
-                  style={{ resize: 'vertical', width: '100%' }}
-                />
+                <textarea rows={3} value={editForm.defect_description} onChange={setEF('defect_description')} placeholder="불량 내용을 상세하게 입력하세요" style={{ resize: 'vertical', width: '100%' }} />
               </div>
             </div>
           </div>
         ) : (
-          /* ── 보기 모드 ── */
           <div className="info-grid">
             {[
               { label: '고객사',        value: claim.customer_name },
@@ -332,46 +590,7 @@ export default function ClaimDetail() {
         <div className="card-title">📍 처리 단계 현황</div>
         <StageTracker currentStage={claim.current_stage} />
 
-        {user && !isClosed && (
-          <div className="advance-section">
-            <div style={{ fontSize: 13, fontWeight: 600, color: '#0f172a', marginBottom: 12 }}>
-              {STAGE_ICONS[currentIdx + 1]}&nbsp;
-              <span style={{ color: '#3b82f6' }}>{nextStage}</span> 단계로 진행
-            </div>
-            <div className="form-grid form-cols-3">
-              <div className="form-group">
-                <label>처리일</label>
-                <input type="date" value={advDate} onChange={e => setAdvDate(e.target.value)} />
-              </div>
-              <div className="form-group">
-                <label>
-                  담당자
-                  <span style={{ fontSize: 10, color: '#94a3b8', marginLeft: 6, fontWeight: 400 }}>
-                    (비우면 로그인 이름 자동 기록)
-                  </span>
-                </label>
-                <input
-                  placeholder={user.displayName || user.email}
-                  value={advHandler}
-                  onChange={e => setAdvHandler(e.target.value)}
-                />
-              </div>
-              <div className="form-group">
-                <label>처리 내용</label>
-                <input
-                  placeholder="처리 내용을 입력하세요"
-                  value={advDesc}
-                  onChange={e => setAdvDesc(e.target.value)}
-                />
-              </div>
-            </div>
-            <div className="form-actions">
-              <button className="btn btn-success" onClick={handleAdvance} disabled={advancing}>
-                {advancing ? '처리 중...' : `→ ${nextStage}으로 진행`}
-              </button>
-            </div>
-          </div>
-        )}
+        {user && !isClosed && renderAdvanceForm()}
 
         {isClosed && (
           <div style={{ marginTop: 16, padding: '10px 14px', background: '#d1fae5', borderRadius: 8, fontSize: 13, color: '#065f46', fontWeight: 600 }}>
@@ -398,7 +617,7 @@ export default function ClaimDetail() {
                       <span className="tl-stage">{entry.stage_name}</span>
                       {entry.stage_date && <span className="tl-date">{entry.stage_date}</span>}
                     </div>
-                    {entry.description && <div className="tl-desc">{entry.description}</div>}
+                    {entry.description && renderDescription(entry.description)}
                     {displayName && (
                       <div className="tl-handler">
                         👤 {displayName}
@@ -415,7 +634,6 @@ export default function ClaimDetail() {
         )}
       </div>
 
-      {/* 품번/품명 검색 모달 */}
       {partSearchOpen && (
         <PartSearchModal
           onSelect={(pno, pname) => setEditForm(prev => ({ ...prev, part_number: pno, part_name: pname }))}
@@ -423,7 +641,6 @@ export default function ClaimDetail() {
         />
       )}
 
-      {/* 삭제 요청 모달 */}
       {deleteReqOpen && (
         <DeleteRequestModal
           claimName={claim.customer_name}
