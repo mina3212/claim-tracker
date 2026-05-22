@@ -1,5 +1,5 @@
 import { createContext, useContext, useState, useEffect, useCallback } from 'react';
-import { sb, getProfile, upsertProfile } from '../lib/supabase';
+import { sb, getProfile, upsertProfile, syncProfileEmail } from '../lib/supabase';
 
 const AuthCtx = createContext(null);
 
@@ -12,23 +12,24 @@ export function AuthProvider({ children }) {
     sb.auth.getSession().then(({ data: { session } }) => {
       const u = session?.user ?? null;
       setUser(u);
-      if (u) loadProfile(u.id).finally(() => setLoading(false));
+      if (u) loadProfile(u.id, u.email).finally(() => setLoading(false));
       else setLoading(false);
     });
 
     const { data: { subscription } } = sb.auth.onAuthStateChange((_, session) => {
       const u = session?.user ?? null;
       setUser(u);
-      if (u) loadProfile(u.id);
+      if (u) loadProfile(u.id, u.email);
       else { setProfile(null); }
     });
     return () => subscription.unsubscribe();
   }, []);
 
-  async function loadProfile(userId) {
+  async function loadProfile(userId, email) {
     try {
       const p = await getProfile(userId);
       setProfile(p ?? null);
+      if (email) syncProfileEmail(userId, email).catch(() => {});
     } catch {
       setProfile(null);
     }

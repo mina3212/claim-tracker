@@ -7,6 +7,7 @@
 CREATE TABLE IF NOT EXISTS profiles (
   id         TEXT PRIMARY KEY,   -- Supabase auth.users.id
   name       TEXT NOT NULL,
+  email      TEXT,               -- 로그인 시 자동 동기화
   department TEXT,               -- 영업팀 / 마케팅팀 / 품질기술팀 / 영업관리팀
   is_admin   BOOLEAN DEFAULT FALSE,
   created_at TIMESTAMPTZ DEFAULT NOW()
@@ -15,6 +16,7 @@ CREATE TABLE IF NOT EXISTS profiles (
 -- ※ 이미 profiles 테이블이 있다면 아래 ALTER로 컬럼 추가
 -- ALTER TABLE profiles ADD COLUMN IF NOT EXISTS department TEXT;
 -- ALTER TABLE profiles ADD COLUMN IF NOT EXISTS is_admin BOOLEAN DEFAULT FALSE;
+-- ALTER TABLE profiles ADD COLUMN IF NOT EXISTS email TEXT;
 
 -- 관리자 지정 (해당 사용자 id로 교체하세요)
 -- UPDATE profiles SET is_admin = TRUE WHERE id = '사용자-UUID';
@@ -28,6 +30,7 @@ CREATE TABLE IF NOT EXISTS claims (
   part_name          TEXT,
   product_type       TEXT,              -- 수입품 / 자체제작상품 / 내수품
   quantity           INTEGER,
+  defect_quantity    INTEGER,
   lot_number         TEXT,
   defect_description TEXT,
   occurrence_date    DATE,
@@ -42,6 +45,7 @@ CREATE TABLE IF NOT EXISTS claims (
 -- ※ 기존 테이블에 컬럼 추가 (이미 claims 테이블이 있는 경우)
 -- ALTER TABLE claims ADD COLUMN IF NOT EXISTS customer_group TEXT;
 -- ALTER TABLE claims ADD COLUMN IF NOT EXISTS product_type TEXT;
+-- ALTER TABLE claims ADD COLUMN IF NOT EXISTS defect_quantity INTEGER;
 
 -- 3. 처리 단계 이력 (작업자 추적 포함)
 CREATE TABLE IF NOT EXISTS claim_stages (
@@ -62,8 +66,12 @@ CREATE TABLE IF NOT EXISTS parts (
   id          TEXT PRIMARY KEY,
   part_number TEXT UNIQUE NOT NULL,
   part_name   TEXT NOT NULL,
+  spec        TEXT,              -- 규격 (선택), 표시: 품명 [규격]
   created_at  TIMESTAMPTZ DEFAULT NOW()
 );
+
+-- ※ 기존 parts 테이블에 컬럼 추가
+-- ALTER TABLE parts ADD COLUMN IF NOT EXISTS spec TEXT;
 
 -- ============================================================
 -- RLS (Row Level Security) 설정

@@ -3,7 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { useClaims } from '../context/ClaimsContext';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
-import { advanceClaim, deleteClaim, updateClaim, insertDeleteRequest, resolveDeleteRequest, STAGES, STAGE_ICONS, STAGE_COLORS, CUSTOMER_GROUPS, PRODUCT_TYPES } from '../lib/supabase';
+import { advanceClaim, deleteClaim, updateClaim, insertDeleteRequest, resolveDeleteRequest, fetchNotifyEmails, STAGES, STAGE_ICONS, STAGE_COLORS, CUSTOMER_GROUPS, PRODUCT_TYPES } from '../lib/supabase';
 import Tooltip from '../components/Tooltip';
 import StageTracker from '../components/StageTracker';
 import StageBadge from '../components/StageBadge';
@@ -12,12 +12,54 @@ import DeleteRequestModal from '../components/DeleteRequestModal';
 
 const CAUSES = ['사용자 과실', '생산공정', '제품불량', '구조불량', '배송오류', '기타'];
 
+function makeMailtoLink(claim, notifyEmails) {
+  const NOTIFY_TO = notifyEmails.length > 0 ? notifyEmails.join(',') : '';
+  const defRate = (() => {
+    const q = claim.quantity; const dq = claim.defect_quantity;
+    return q > 0 && dq != null ? ((dq / q) * 100).toFixed(1) + '%' : '-';
+  })();
+
+  const subject = encodeURIComponent(
+    `[클레임 접수] ${claim.customer_name} / ${claim.part_number || claim.part_name || ''} (${claim.receipt_date || '날짜미상'})`
+  );
+  const body = encodeURIComponent([
+    '■ 클레임 접수 알림',
+    '',
+    `고객사 그룹  : ${claim.customer_group || '-'}`,
+    `고객사명    : ${claim.customer_name}`,
+    `접수일      : ${claim.receipt_date || '-'}`,
+    `발생일      : ${claim.occurrence_date || '-'}`,
+    '',
+    `품번        : ${claim.part_number || '-'}`,
+    `품명        : ${claim.part_name || '-'}`,
+    `품목 유형   : ${claim.product_type || '-'}`,
+    `LOT 번호    : ${claim.lot_number || '-'}`,
+    '',
+    `출고 수량   : ${claim.quantity != null ? claim.quantity + ' EA' : '-'}`,
+    `불량 수량   : ${claim.defect_quantity != null ? claim.defect_quantity + ' EA' : '-'}`,
+    `불량률      : ${defRate}`,
+    '',
+    `불량 내용   :`,
+    claim.defect_description || '-',
+    '',
+    `영업담당자  : ${claim.sales_rep_name || '-'}  /  ${claim.sales_rep_contact || '-'}`,
+    '',
+    '─────────────────────────────',
+    '이 메일은 클레임 관리 시스템에서 수동 발송되었습니다.',
+  ].join('\n'));
+
+  return `mailto:${NOTIFY_TO}?subject=${subject}&body=${body}`;
+}
+
 export default function ClaimDetail() {
   const { id }   = useParams();
   const navigate = useNavigate();
   const { claims, loading, getStagesFor, updateClaimStage, updateClaimData, removeClaim, deleteRequests, addDeleteRequest, resolveRequest } = useClaims();
   const { user, isAdmin } = useAuth();
   const toast = useToast();
+
+  const [notifyEmails, setNotifyEmails] = useState([]);
+  useEffect(() => { fetchNotifyEmails().then(setNotifyEmails).catch(() => {}); }, []);
 
   /* ── 단계 진행 공통 상태 ── */
   const [advDate,    setAdvDate]    = useState(new Date().toISOString().slice(0, 10));
@@ -162,6 +204,7 @@ export default function ClaimDetail() {
       product_type:       claim.product_type || '',
       quantity:           claim.quantity != null ? String(claim.quantity) : '',
       lot_number:         claim.lot_number || '',
+      defect_quantity:    claim.defect_quantity != null ? String(claim.defect_quantity) : '',
       defect_description: claim.defect_description || '',
     });
     setEditMode(true);
@@ -187,6 +230,7 @@ export default function ClaimDetail() {
         product_type:       editForm.product_type || null,
         quantity:           editForm.quantity !== '' ? parseInt(editForm.quantity) : null,
         lot_number:         editForm.lot_number.trim() || null,
+        defect_quantity:    editForm.defect_quantity !== '' ? parseInt(editForm.defect_quantity) : null,
         defect_description: editForm.defect_description.trim(),
       };
       await updateClaim(id, payload);
@@ -445,6 +489,17 @@ export default function ClaimDetail() {
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
         <button className="back-btn" onClick={() => navigate('/claims')}>← 클레임 목록으로</button>
         <div style={{ display: 'flex', gap: 8 }}>
+          {/* 이메일 알림 버튼 */}
+          {!editMode && (
+            <a
+              href={makeMailtoLink(claim, notifyEmails)}
+              className="btn btn-ghost btn-sm no-print"
+              style={{ textDecoration: 'none', color: '#1d4ed8', borderColor: '#bfdbfe', background: '#eff6ff' }}
+              title={notifyEmails.length > 0 ? `수신: ${notifyEmails.join(', ')}` : '수신자 없음 (로그인 후 이메일 자동 등록됨)'}
+            >
+              📧 이메일 알림
+            </a>
+          )}
           {user && !editMode && (
             <button className="btn btn-ghost btn-sm" onClick={startEdit}>✏️ 수정</button>
           )}
@@ -597,6 +652,28 @@ export default function ClaimDetail() {
                   })}
                 </div>
               </div>
+              <div className="form-group">
+                <label>불량 수량 (EA)</label>
+                <input type="number" min="0" value={editForm.defect_quantity} onChange={setEF('defect_quantity')} placeholder="0" />
+              </div>
+              <div className="form-group">
+                <label>불량률</label>
+                {(() => {
+                  const q = parseFloat(editForm.quantity);
+                  const dq = parseFloat(editForm.defect_quantity);
+                  const rate = q > 0 && dq >= 0 ? ((dq / q) * 100).toFixed(1) : null;
+                  return (
+                    <div style={{
+                      padding: '8px 12px', border: '1px solid #e2e8f0', borderRadius: 8,
+                      background: '#f8fafc', fontSize: 13, minHeight: 38, display: 'flex', alignItems: 'center',
+                      color: rate !== null ? (parseFloat(rate) > 5 ? '#dc2626' : '#059669') : '#94a3b8',
+                      fontWeight: rate !== null ? 700 : 400,
+                    }}>
+                      {rate !== null ? `${parseFloat(rate) > 5 ? '🔴' : '🟢'} ${rate}% (${dq}/${q}개)` : '-'}
+                    </div>
+                  );
+                })()}
+              </div>
               <div className="form-group form-span-4">
                 <label>불량 내용 <span className="required-star">*</span></label>
                 <textarea rows={3} value={editForm.defect_description} onChange={setEF('defect_description')} placeholder="불량 내용을 상세하게 입력하세요" style={{ resize: 'vertical', width: '100%' }} />
@@ -614,8 +691,10 @@ export default function ClaimDetail() {
               { label: '품번',          value: claim.part_number || '-', mono: true },
               { label: '품명',          value: claim.part_name || '-' },
               { label: '품목 유형',     value: claim.product_type || '-', typeChip: claim.product_type },
-              { label: '수량',          value: claim.quantity != null ? Number(claim.quantity).toLocaleString() + ' EA' : '-' },
+              { label: '출고 수량',      value: claim.quantity != null ? Number(claim.quantity).toLocaleString() + ' EA' : '-' },
               { label: 'LOT 번호',      value: claim.lot_number || '-', mono: true },
+              { label: '불량 수량',     value: claim.defect_quantity != null ? Number(claim.defect_quantity).toLocaleString() + ' EA' : '-' },
+              { label: '불량률',        value: null, defRate: true },
               { label: '영업담당자',    value: claim.sales_rep_name || '-' },
               { label: '담당자 연락처', value: claim.sales_rep_contact || '-' },
               { label: '불량 내용',     value: claim.defect_description || '-', span: 2 },
@@ -628,7 +707,15 @@ export default function ClaimDetail() {
                     ? <span style={{ background: '#0f172a', color: '#fff', padding: '2px 10px', borderRadius: 12, fontSize: 12, fontWeight: 600 }}>{item.chip}</span>
                     : item.typeChip
                       ? <span style={{ background: '#dbeafe', color: '#1e40af', padding: '2px 10px', borderRadius: 12, fontSize: 12, fontWeight: 600 }}>{item.typeChip}</span>
-                      : <span className={`info-value${item.mono ? ' mono' : ''}`}>{item.value}</span>}
+                      : item.defRate
+                        ? (() => {
+                            const q = claim.quantity; const dq = claim.defect_quantity;
+                            const rate = q > 0 && dq != null ? ((dq / q) * 100).toFixed(1) : null;
+                            return <span className="info-value" style={{ color: rate !== null ? (parseFloat(rate) > 5 ? '#dc2626' : '#059669') : '#94a3b8', fontWeight: 700 }}>
+                              {rate !== null ? `${parseFloat(rate) > 5 ? '🔴' : '🟢'} ${rate}% (${dq}/${q}개)` : '-'}
+                            </span>;
+                          })()
+                        : <span className={`info-value${item.mono ? ' mono' : ''}`}>{item.value}</span>}
               </div>
             ))}
           </div>

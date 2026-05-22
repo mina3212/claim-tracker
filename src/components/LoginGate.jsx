@@ -4,7 +4,7 @@ import { useToast } from '../context/ToastContext';
 
 const DEPARTMENTS = ['영업팀', '마케팅팀', '품질기술팀', '영업관리팀'];
 
-const FF = "'Helvetica Neue','Nanum Gothic',Arial,sans-serif";
+const FF = "'Inter','Nanum Gothic',sans-serif";
 
 const inputStyle = {
   width: '100%', padding: '11px 14px',
@@ -75,7 +75,7 @@ export default function LoginGate() {
     try {
       const { data, error: err } = await signUp(email, password, name.trim());
       if (err) { setError(err.message); return; }
-      if (data?.user?.id) await upsertProfile(data.user.id, name.trim(), dept).catch(() => {});
+      if (data?.user?.id) await upsertProfile(data.user.id, name.trim(), dept, data.user.email).catch(() => {});
       toast('회원가입 완료', '로그인 되었습니다.', 'success');
     } finally {
       setLoading(false);

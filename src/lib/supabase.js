@@ -32,11 +32,27 @@ export async function getProfile(userId) {
   return data;
 }
 
-export async function upsertProfile(userId, name, department) {
+export async function upsertProfile(userId, name, department, email) {
   const payload = { id: userId, name };
   if (department) payload.department = department;
+  if (email)      payload.email      = email;
   const { error } = await sb.from('profiles').upsert(payload);
   if (error) throw error;
+}
+
+export async function syncProfileEmail(userId, email) {
+  if (!userId || !email) return;
+  await sb.from('profiles').update({ email }).eq('id', userId);
+}
+
+/* 알림 수신자: 관리자 + 품질기술팀 이메일 목록 */
+export async function fetchNotifyEmails() {
+  const { data } = await sb
+    .from('profiles')
+    .select('email')
+    .or('is_admin.eq.true,department.eq.품질기술팀')
+    .not('email', 'is', null);
+  return (data || []).map(r => r.email).filter(Boolean);
 }
 
 // ── Claims CRUD ───────────────────────────────────────────────

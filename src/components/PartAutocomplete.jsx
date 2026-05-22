@@ -18,13 +18,19 @@ export default function PartAutocomplete({ partNumber, partName, onSelect }) {
   // partNumber prop이 외부에서 바뀌면 동기화
   useEffect(() => { setQuery(partNumber || ''); }, [partNumber]);
 
+  const partLabel = (p) => p.spec ? `${p.part_name} [${p.spec}]` : p.part_name;
+
   const handleInput = (val) => {
     setQuery(val);
     onSelect(val, ''); // 품명 초기화
     if (!val.trim()) { setSuggestions([]); setOpen(false); return; }
     const q = val.toLowerCase();
     const matched = parts
-      .filter(p => p.part_number.toLowerCase().includes(q) || p.part_name.toLowerCase().includes(q))
+      .filter(p =>
+        p.part_number.toLowerCase().includes(q)
+        || p.part_name.toLowerCase().includes(q)
+        || (p.spec || '').toLowerCase().includes(q)
+      )
       .slice(0, 12);
     setSuggestions(matched);
     setOpen(matched.length > 0);
@@ -34,7 +40,7 @@ export default function PartAutocomplete({ partNumber, partName, onSelect }) {
     setQuery(p.part_number);
     setSuggestions([]);
     setOpen(false);
-    onSelect(p.part_number, p.part_name);
+    onSelect(p.part_number, partLabel(p));
   };
 
   const highlight = (text, q) => {
@@ -82,6 +88,7 @@ export default function PartAutocomplete({ partNumber, partName, onSelect }) {
               </span>
               <span style={{ color: '#475569' }}>
                 {highlight(p.part_name, query)}
+                {p.spec && <span style={{ marginLeft: 5, fontSize: 11, color: '#64748b', background: '#f1f5f9', padding: '1px 5px', borderRadius: 3 }}>[{highlight(p.spec, query)}]</span>}
               </span>
             </div>
           ))}

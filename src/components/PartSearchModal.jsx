@@ -16,10 +16,14 @@ export default function PartSearchModal({ onSelect, onClose }) {
   const { parts } = useParts();
   const [query, setQuery] = useState('');
 
+  const partLabel = (p) => p.spec ? `${p.part_name} [${p.spec}]` : p.part_name;
+
   const filtered = parts.filter(p => {
     if (!query.trim()) return true;
     const q = query.toLowerCase();
-    return p.part_number.toLowerCase().includes(q) || p.part_name.toLowerCase().includes(q);
+    return p.part_number.toLowerCase().includes(q)
+      || p.part_name.toLowerCase().includes(q)
+      || (p.spec || '').toLowerCase().includes(q);
   }).slice(0, 60);
 
   const handleKey = (e) => { if (e.key === 'Escape') onClose(); };
@@ -65,7 +69,7 @@ export default function PartSearchModal({ onSelect, onClose }) {
             filtered.map(p => (
               <div
                 key={p.id}
-                onClick={() => { onSelect(p.part_number, p.part_name); onClose(); }}
+                onClick={() => { onSelect(p.part_number, partLabel(p)); onClose(); }}
                 style={{
                   display: 'flex', gap: 12, alignItems: 'center',
                   padding: '10px 14px', cursor: 'pointer', fontSize: 13,
@@ -81,7 +85,10 @@ export default function PartSearchModal({ onSelect, onClose }) {
                 }}>
                   {p.part_number}
                 </span>
-                <span style={{ color: '#374151' }}>{p.part_name}</span>
+                <span style={{ color: '#374151' }}>
+                  {p.part_name}
+                  {p.spec && <span style={{ marginLeft: 5, fontSize: 11, color: '#64748b', background: '#f1f5f9', padding: '1px 5px', borderRadius: 3 }}>[{p.spec}]</span>}
+                </span>
               </div>
             ))
           )}

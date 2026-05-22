@@ -51,6 +51,7 @@ export default function Parts() {
       const sample = rows[0];
       const numCol  = findCol(sample, ['품번','PartNumber','part_number','PART_NO','partno','부품번호']);
       const nameCol = findCol(sample, ['품명','PartName','part_name','PART_NAME','부품명','품목명']);
+      const specCol = findCol(sample, ['규격','Spec','spec','SPEC','specification','사양']);
 
       if (!numCol || !nameCol) {
         toast('컬럼 인식 실패', '"품번"과 "품명" 컬럼이 필요합니다', 'error');
@@ -64,6 +65,7 @@ export default function Parts() {
           id: uid(),
           part_number: r[numCol].toString().trim(),
           part_name:   r[nameCol]?.toString().trim() || '',
+          spec:        specCol ? (r[specCol]?.toString().trim() || null) : null,
         }))
         .filter(r => {
           if (seen.has(r.part_number)) return false;
@@ -108,7 +110,10 @@ export default function Parts() {
 
   const filtered = parts.filter(p => {
     const q = search.toLowerCase();
-    return !q || p.part_number.toLowerCase().includes(q) || p.part_name.toLowerCase().includes(q);
+    return !q
+      || p.part_number.toLowerCase().includes(q)
+      || p.part_name.toLowerCase().includes(q)
+      || (p.spec || '').toLowerCase().includes(q);
   });
 
   if (!user) return (
@@ -243,6 +248,7 @@ export default function Parts() {
                   <th>#</th>
                   <th>품번</th>
                   <th>품명</th>
+                  <th>규격</th>
                   {isAdmin && <th></th>}
                 </tr>
               </thead>
@@ -251,7 +257,15 @@ export default function Parts() {
                   <tr key={p.id}>
                     <td style={{ color: '#94a3b8', width: 50 }}>{i + 1}</td>
                     <td className="mono">{p.part_number}</td>
-                    <td>{p.part_name}</td>
+                    <td>
+                      {p.part_name}
+                      {p.spec && (
+                        <span style={{ marginLeft: 6, fontSize: 11, color: '#64748b', background: '#f1f5f9', padding: '1px 6px', borderRadius: 4 }}>
+                          [{p.spec}]
+                        </span>
+                      )}
+                    </td>
+                    <td style={{ fontSize: 12, color: '#64748b' }}>{p.spec || '-'}</td>
                     {isAdmin && (
                       <td style={{ width: 50 }}>
                         <button

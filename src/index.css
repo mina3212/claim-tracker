@@ -1,9 +1,10 @@
-@import url('https://fonts.googleapis.com/css2?family=Nanum+Gothic:wght@400;700;800&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Inter:ital,opsz,wght@0,14..32,400;0,14..32,500;0,14..32,600;0,14..32,700;0,14..32,800;1,14..32,400&family=Nanum+Gothic:wght@400;700;800&display=swap');
 
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
 body {
-  font-family: 'Helvetica Neue', 'Nanum Gothic', Arial, sans-serif;
+  /* Inter = Helvetica 대체 웹폰트 (Windows/Linux 호환), 한글은 Nanum Gothic */
+  font-family: 'Inter', 'Nanum Gothic', sans-serif;
   background: #f1f5f9;
   color: #1e293b;
   -webkit-font-smoothing: antialiased;
