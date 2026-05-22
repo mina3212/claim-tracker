@@ -1,7 +1,8 @@
 {
   "permissions": {
     "allow": [
-      "Bash(Select-String \"emailjs|resend|nodemailer\")"
+      "Bash(Select-String \"emailjs|resend|nodemailer\")",
+      "Bash(git *)"
     ]
   }
 }

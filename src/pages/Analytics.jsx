@@ -1,4 +1,4 @@
-import { useMemo, useState, Fragment } from 'react';
+import { useMemo, useState, useEffect, Fragment } from 'react';
 import { useNavigate } from 'react-router-dom';
 import ExcelJS from 'exceljs';
 import {
@@ -7,6 +7,7 @@ import {
 } from 'recharts';
 import { useClaims } from '../context/ClaimsContext';
 import { useAuth } from '../context/AuthContext';
+import { usePrintTitle } from '../context/PrintContext';
 import StageBadge from '../components/StageBadge';
 import { STAGES, STAGE_COLORS, CUSTOMER_GROUPS, PRODUCT_TYPES } from '../lib/supabase';
 
@@ -192,6 +193,19 @@ export default function Analytics() {
   const [periodType, setPeriodType] = useState('전체');
   const [selYear,    setSelYear]    = useState('');
   const [selPeriod,  setSelPeriod]  = useState('');
+
+  /* ── 인쇄 제목 동기화 ── */
+  const { setPrintTitle } = usePrintTitle();
+  useEffect(() => {
+    const y = selYear ? `${selYear}년` : '';
+    let title = 'AJW 클레임 누적 분석';
+    if (periodType === '전체')       title += ' — 전체 기간';
+    else if (periodType === '연도')  title += y ? ` — ${selYear}년도` : ' — 연도별';
+    else if (periodType === '반기')  title += y && selPeriod ? ` — ${y} ${selPeriod}` : y ? ` — ${y} 반기별` : ' — 반기별';
+    else if (periodType === '분기')  title += y && selPeriod ? ` — ${y} ${selPeriod}` : y ? ` — ${y} 분기별` : ' — 분기별';
+    else if (periodType === '월별')  title += y && selPeriod ? ` — ${y} ${selPeriod}` : y ? ` — ${y} 월별` : ' — 월별';
+    setPrintTitle(title);
+  }, [periodType, selYear, selPeriod, setPrintTitle]);
 
   /* ── 기간 필터 적용 ── */
   const filteredClaims = useMemo(() => {

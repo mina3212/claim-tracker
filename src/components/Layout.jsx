@@ -4,6 +4,7 @@ import { useAuth } from '../context/AuthContext';
 import { signOut } from '../lib/supabase';
 import { useToast } from '../context/ToastContext';
 import { usePresence } from '../hooks/usePresence';
+import { usePrintTitle } from '../context/PrintContext';
 
 const DEPT_COLORS = {
   '영업팀':    { bg: '#dbeafe', text: '#1e40af' },
@@ -16,6 +17,7 @@ const printDate = new Date().toLocaleDateString('ko-KR', { year: 'numeric', mont
 
 export default function Layout() {
   const { user, displayName, department, isAdmin, saveName } = useAuth();
+  const { printTitle } = usePrintTitle();
   const toast = useToast();
   const navigate = useNavigate();
   const onlineUsers = usePresence(user, displayName, department);
@@ -247,8 +249,8 @@ export default function Layout() {
         {/* 인쇄/PDF 전용 헤더 */}
         <div className="print-header">
           <div>
-            <div className="print-header-title">🚨 클레임 관리 시스템</div>
-            <div className="print-header-sub">AJW 고객사 클레임 트래킹 플랫폼</div>
+            <div className="print-header-title">{printTitle}</div>
+            <div className="print-header-sub">AJW 고객사 클레임 관리 시스템</div>
           </div>
           <div className="print-header-right">
             <div className="print-confidential">🔒 대외비</div>

@@ -4,6 +4,7 @@ import { useClaims } from '../context/ClaimsContext';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
 import { advanceClaim, deleteClaim, updateClaim, insertDeleteRequest, resolveDeleteRequest, fetchNotifyEmails, STAGES, STAGE_ICONS, STAGE_COLORS, CUSTOMER_GROUPS, PRODUCT_TYPES } from '../lib/supabase';
+import { usePrintTitle } from '../context/PrintContext';
 import Tooltip from '../components/Tooltip';
 import StageTracker from '../components/StageTracker';
 import StageBadge from '../components/StageBadge';
@@ -61,6 +62,8 @@ export default function ClaimDetail() {
   const [notifyEmails, setNotifyEmails] = useState([]);
   useEffect(() => { fetchNotifyEmails().then(setNotifyEmails).catch(() => {}); }, []);
 
+  const { setPrintTitle } = usePrintTitle();
+
   /* ── 단계 진행 공통 상태 ── */
   const [advDate,    setAdvDate]    = useState(new Date().toISOString().slice(0, 10));
   const [advHandler, setAdvHandler] = useState('');
@@ -97,6 +100,12 @@ export default function ClaimDetail() {
   const isClosed   = claim.current_stage === '종결';
   const nextStage  = !isClosed ? STAGES[currentIdx + 1] : null;
   const pendingReqs = deleteRequests.filter(r => r.claim_id === id);
+
+  useEffect(() => {
+    if (!claim) return;
+    const date = claim.receipt_date ? ` (${claim.receipt_date})` : '';
+    setPrintTitle(`AJW 클레임 상세 — ${claim.customer_name}${date}`);
+  }, [claim, setPrintTitle]);
 
   /* ── 원인 체크박스 토글 ── */
   const toggleCause = (cause) => {

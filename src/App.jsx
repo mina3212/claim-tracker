@@ -2,6 +2,7 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { ToastProvider }  from './context/ToastContext';
 import { ClaimsProvider } from './context/ClaimsContext';
+import { PrintProvider }  from './context/PrintContext';
 import Layout      from './components/Layout';
 import LoginGate   from './components/LoginGate';
 import Dashboard   from './pages/Dashboard';
@@ -34,6 +35,7 @@ function AppRoutes() {
   return (
     <ClaimsProvider>
       <BrowserRouter>
+        <PrintProvider>
         <Routes>
           <Route path="/" element={<Layout />}>
             <Route index element={<Dashboard />} />
@@ -45,6 +47,7 @@ function AppRoutes() {
             <Route path="*" element={<Navigate to="/" replace />} />
           </Route>
         </Routes>
+        </PrintProvider>
       </BrowserRouter>
     </ClaimsProvider>
   );

@@ -1,8 +1,9 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useClaims } from '../context/ClaimsContext';
 import StageBadge from '../components/StageBadge';
 import { STAGES, STAGE_COLORS, STAGE_ICONS } from '../lib/supabase';
+import { usePrintTitle } from '../context/PrintContext';
 
 const OVERLAY = {
   position: 'fixed', inset: 0, background: 'rgba(0,0,0,.45)',
@@ -18,7 +19,13 @@ const MODAL = {
 export default function Dashboard() {
   const { claims, loading, dbReady } = useClaims();
   const navigate = useNavigate();
-  const [modal, setModal] = useState(null); // { label, icon, color, items }
+  const [modal, setModal] = useState(null);
+
+  const { setPrintTitle } = usePrintTitle();
+  useEffect(() => {
+    const y = new Date().getFullYear();
+    setPrintTitle(`AJW 클레임 관리 현황 — ${y}년`);
+  }, [setPrintTitle]);
 
   if (loading) return <div className="loading">⏳ 불러오는 중...</div>;
 

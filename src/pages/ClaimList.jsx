@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useClaims } from '../context/ClaimsContext';
 import { useAuth } from '../context/AuthContext';
@@ -6,6 +6,7 @@ import { useToast } from '../context/ToastContext';
 import { deleteClaim, insertDeleteRequest, STAGES } from '../lib/supabase';
 import StageBadge from '../components/StageBadge';
 import DeleteRequestModal from '../components/DeleteRequestModal';
+import { usePrintTitle } from '../context/PrintContext';
 
 export default function ClaimList() {
   const { claims, loading, removeClaim, deleteRequests, addDeleteRequest } = useClaims();
@@ -15,9 +16,17 @@ export default function ClaimList() {
   const [searchParams, setSearchParams] = useSearchParams();
 
   const [search, setSearch]                 = useState('');
-  const [deleteReqTarget, setDeleteReqTarget] = useState(null); // { id, name }
+  const [deleteReqTarget, setDeleteReqTarget] = useState(null);
   const stageFilter    = searchParams.get('stage') || 'all';
   const customerFilter = searchParams.get('customer') || 'all';
+
+  const { setPrintTitle } = usePrintTitle();
+  useEffect(() => {
+    const y = new Date().getFullYear();
+    const stagePart    = stageFilter !== 'all'    ? ` — ${stageFilter} 단계` : '';
+    const customerPart = customerFilter !== 'all' ? ` (${customerFilter})` : '';
+    setPrintTitle(`AJW 클레임 목록 ${y}${stagePart}${customerPart}`);
+  }, [stageFilter, customerFilter, setPrintTitle]);
 
   const setStageFilter    = (v) => setSearchParams(prev => { const p = new URLSearchParams(prev); v === 'all' ? p.delete('stage') : p.set('stage', v); return p; });
   const setCustomerFilter = (v) => setSearchParams(prev => { const p = new URLSearchParams(prev); v === 'all' ? p.delete('customer') : p.set('customer', v); return p; });
