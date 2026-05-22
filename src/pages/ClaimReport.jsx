@@ -109,7 +109,7 @@ export default function ClaimReport() {
             <div style={{ fontSize: 11, color: '#64748b', marginTop: 4 }}>CLAIM PROCESSING RESULT REPORT</div>
           </div>
           <div style={{ textAlign: 'right' }}>
-            <div style={{ fontSize: 15, fontWeight: 700, color: '#0f172a' }}>AJW Optical</div>
+            <div style={{ fontSize: 15, fontWeight: 700, color: '#0f172a' }}>(주)에이제이월드</div>
             <div style={{ fontSize: 11, color: '#64748b', marginTop: 2 }}>발행일: {today}</div>
           </div>
         </div>
@@ -255,7 +255,7 @@ export default function ClaimReport() {
         </div>
 
         <div style={{ marginTop: 32, fontSize: 10, color: '#94a3b8', textAlign: 'center', borderTop: '1px solid #e2e8f0', paddingTop: 12 }}>
-          본 문서는 AJW Optical 클레임 관리 시스템에서 자동 생성되었습니다.
+          본 문서는 (주)에이제이월드 클레임 관리 시스템에서 자동 생성되었습니다.
         </div>
       </div>
 
