@@ -542,6 +542,15 @@ export default function ClaimDetail() {
         <button className="back-btn" onClick={() => navigate('/claims')}>← 클레임 목록으로</button>
         <div style={{ display: 'flex', gap: 8 }}>
           {/* 이메일 알림 버튼 */}
+          {isClosed && !editMode && (
+            <button
+              className="btn btn-sm no-print"
+              onClick={() => window.open(`/claims/${id}/report`, '_blank')}
+              style={{ background: '#f0fdf4', color: '#166534', border: '1px solid #bbf7d0', fontWeight: 700 }}
+            >
+              📄 처리결과보고서
+            </button>
+          )}
           {!editMode && (
             <a
               href={makeMailtoLink(claim, notifyEmails)}

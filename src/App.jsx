@@ -8,6 +8,7 @@ import LoginGate   from './components/LoginGate';
 import Dashboard   from './pages/Dashboard';
 import ClaimList   from './pages/ClaimList';
 import ClaimDetail from './pages/ClaimDetail';
+import ClaimReport from './pages/ClaimReport';
 import NewClaim    from './pages/NewClaim';
 import Analytics   from './pages/Analytics';
 import Parts       from './pages/Parts';
@@ -42,6 +43,7 @@ function AppRoutes() {
             <Route path="claims" element={<ClaimList />} />
             <Route path="claims/new" element={<NewClaim />} />
             <Route path="claims/:id" element={<ClaimDetail />} />
+            <Route path="claims/:id/report" element={<ClaimReport />} />
             <Route path="analytics" element={<Analytics />} />
             <Route path="parts" element={<Parts />} />
             <Route path="*" element={<Navigate to="/" replace />} />
