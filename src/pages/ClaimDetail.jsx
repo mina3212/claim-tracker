@@ -128,6 +128,15 @@ export default function ClaimDetail() {
       return;
     }
 
+    if (!advHandlerDept) {
+      toast('입력 필요', '담당 부서를 선택하세요', 'error');
+      return;
+    }
+    if (!advHandler.trim()) {
+      toast('입력 필요', '담당자 이름을 입력하세요', 'error');
+      return;
+    }
+
     // 1차 대응 → 회수품 원인분석: 처리내용 필수
     if (claim.current_stage === '1차 대응') {
       if (!advDesc.trim()) {
@@ -343,23 +352,19 @@ export default function ClaimDetail() {
             <input type="date" value={advDate} onChange={e => setAdvDate(e.target.value)} />
           </div>
           <div className="form-group">
-            <label>담당 부서</label>
-            <select value={advHandlerDept} onChange={e => setAdvHandlerDept(e.target.value)}>
+            <label>담당 부서 <span className="required-star">*</span></label>
+            <select value={advHandlerDept} onChange={e => setAdvHandlerDept(e.target.value)} style={{ borderColor: !advHandlerDept ? '#fca5a5' : undefined }}>
               <option value="">부서 선택</option>
               {DEPARTMENTS.map(d => <option key={d} value={d}>{d}</option>)}
             </select>
           </div>
           <div className="form-group">
-            <label>
-              담당자 이름
-              <span style={{ fontSize: 10, color: '#94a3b8', marginLeft: 6, fontWeight: 400 }}>
-                (선택)
-              </span>
-            </label>
+            <label>담당자 이름 <span className="required-star">*</span></label>
             <input
-              placeholder={user?.displayName || user?.email}
+              placeholder="이름 입력"
               value={advHandler}
               onChange={e => setAdvHandler(e.target.value)}
+              style={{ borderColor: !advHandler.trim() ? '#fca5a5' : undefined }}
             />
           </div>
         </div>
