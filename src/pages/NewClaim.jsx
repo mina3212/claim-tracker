@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useClaims } from '../context/ClaimsContext';
 import { useToast } from '../context/ToastContext';
-import { insertClaim, CUSTOMER_GROUPS, PRODUCT_TYPES } from '../lib/supabase';
+import { insertClaim, CUSTOMER_GROUPS, PRODUCT_TYPES, PRODUCT_CATEGORIES, DEPARTMENTS } from '../lib/supabase';
 import PartSearchModal from '../components/PartSearchModal';
 import Tooltip from '../components/Tooltip';
 
@@ -14,11 +14,13 @@ const INITIAL = {
   customer_name:      '',
   occurrence_date:    '',
   receipt_date:       today(),
+  sales_rep_dept:     '',
   sales_rep_name:     '',
   sales_rep_contact:  '',
   part_number:        '',
   part_name:          '',
   product_type:       '',
+  product_category:   '',
   quantity:           '',
   lot_number:         '',
   defect_quantity:    '',
@@ -58,6 +60,7 @@ export default function NewClaim() {
     /* ── 필수 검증 ── */
     if (!form.customer_name.trim())    { toast('입력 오류', '고객사명을 입력하세요', 'error'); return; }
     if (!form.occurrence_date)         { toast('입력 오류', '발생일을 선택하세요', 'error'); return; }
+    if (!form.sales_rep_dept)           { toast('입력 오류', '영업담당자 부서를 선택하세요', 'error'); return; }
     if (!form.sales_rep_name.trim())   { toast('입력 오류', '영업담당자를 입력하세요', 'error'); return; }
     if (!form.sales_rep_contact.trim()){ toast('입력 오류', '담당자 연락처를 입력하세요', 'error'); return; }
 
@@ -66,6 +69,7 @@ export default function NewClaim() {
     if (form.quantity === '')          { toast('입력 오류', '수량을 입력하세요', 'error'); return; }
     if (!form.lot_number.trim())       { toast('입력 오류', 'LOT 번호를 입력하세요', 'error'); return; }
     if (!form.product_type)            { toast('입력 오류', '품목 유형을 선택하세요', 'error'); return; }
+    if (!form.product_category)        { toast('입력 오류', '품목군을 선택하세요', 'error'); return; }
 
     if (form.defect_quantity === '')   { toast('입력 오류', '불량 수량을 입력하세요', 'error'); return; }
     if (defQty > qty)                  { toast('입력 오류', '불량 수량이 출고 수량보다 클 수 없습니다', 'error'); return; }
@@ -80,7 +84,9 @@ export default function NewClaim() {
         customer_name:      form.customer_name.trim(),
         customer_group:     form.customer_group || null,
         product_type:       form.product_type || null,
+        product_category:   form.product_category || null,
         defect_description: form.defect_description.trim(),
+        sales_rep_dept:     form.sales_rep_dept || null,
         sales_rep_name:     form.sales_rep_name.trim(),
         sales_rep_contact:  form.sales_rep_contact.trim(),
         part_number:        form.part_number.trim(),
@@ -146,6 +152,13 @@ export default function NewClaim() {
             <div className="form-group">
               <label>접수일</label>
               <input type="date" value={form.receipt_date} onChange={set('receipt_date')} />
+            </div>
+            <div className="form-group">
+              <label>영업담당 부서 <span className="required-star">*</span></label>
+              <select value={form.sales_rep_dept} onChange={set('sales_rep_dept')} required>
+                <option value="">부서 선택</option>
+                {DEPARTMENTS.map(d => <option key={d} value={d}>{d}</option>)}
+              </select>
             </div>
             <div className="form-group">
               <label>영업담당자 <span className="required-star">*</span></label>
@@ -214,6 +227,25 @@ export default function NewClaim() {
                     </Tooltip>
                   );
                 })}
+              </div>
+            </div>
+            <div className="form-group form-span-4">
+              <label>품목군 <span className="required-star">*</span></label>
+              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                {PRODUCT_CATEGORIES.map(c => (
+                  <button
+                    key={c} type="button"
+                    onClick={() => setForm(prev => ({ ...prev, product_category: prev.product_category === c ? '' : c }))}
+                    style={{
+                      padding: '6px 20px', borderRadius: 20, fontSize: 13, fontWeight: 600,
+                      cursor: 'pointer', border: '1.5px solid',
+                      background: form.product_category === c ? '#7c3aed' : '#fff',
+                      color: form.product_category === c ? '#fff' : '#64748b',
+                      borderColor: form.product_category === c ? '#7c3aed' : '#e2e8f0',
+                      transition: '.15s', fontFamily: 'inherit',
+                    }}
+                  >{c}</button>
+                ))}
               </div>
             </div>
           </div>

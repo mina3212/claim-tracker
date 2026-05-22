@@ -3,7 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { useClaims } from '../context/ClaimsContext';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
-import { advanceClaim, deleteClaim, updateClaim, insertDeleteRequest, resolveDeleteRequest, fetchNotifyEmails, STAGES, STAGE_ICONS, STAGE_COLORS, CUSTOMER_GROUPS, PRODUCT_TYPES } from '../lib/supabase';
+import { advanceClaim, deleteClaim, updateClaim, updateStageEntry, insertDeleteRequest, resolveDeleteRequest, fetchNotifyEmails, STAGES, STAGE_ICONS, STAGE_COLORS, CUSTOMER_GROUPS, PRODUCT_TYPES, PRODUCT_CATEGORIES, DEPARTMENTS } from '../lib/supabase';
 import { usePrintTitle } from '../context/PrintContext';
 import Tooltip from '../components/Tooltip';
 import StageTracker from '../components/StageTracker';
@@ -55,7 +55,7 @@ function makeMailtoLink(claim, notifyEmails) {
 export default function ClaimDetail() {
   const { id }   = useParams();
   const navigate = useNavigate();
-  const { claims, loading, getStagesFor, updateClaimStage, updateClaimData, removeClaim, deleteRequests, addDeleteRequest, resolveRequest } = useClaims();
+  const { claims, loading, getStagesFor, updateClaimStage, updateClaimData, removeClaim, deleteRequests, addDeleteRequest, resolveRequest, patchStageEntry } = useClaims();
   const { user, isAdmin } = useAuth();
   const toast = useToast();
 
@@ -65,10 +65,16 @@ export default function ClaimDetail() {
   const { setPrintTitle } = usePrintTitle();
 
   /* ── 단계 진행 공통 상태 ── */
-  const [advDate,    setAdvDate]    = useState(new Date().toISOString().slice(0, 10));
-  const [advHandler, setAdvHandler] = useState('');
-  const [advDesc,    setAdvDesc]    = useState('');
-  const [advancing,  setAdvancing]  = useState(false);
+  const [advDate,        setAdvDate]        = useState(new Date().toISOString().slice(0, 10));
+  const [advHandlerDept, setAdvHandlerDept] = useState('');
+  const [advHandler,     setAdvHandler]     = useState('');
+  const [advDesc,        setAdvDesc]        = useState('');
+  const [advancing,      setAdvancing]      = useState(false);
+
+  /* ── 이력 항목 수정 상태 ── */
+  const [editingEntryId, setEditingEntryId] = useState(null);
+  const [entryEdit,      setEntryEdit]      = useState({});
+  const [savingEntry,    setSavingEntry]    = useState(false);
 
   /* ── 회수품 원인분석 전용 상태 ── */
   const [selectedCauses,   setSelectedCauses]   = useState([]);
@@ -168,12 +174,13 @@ export default function ClaimDetail() {
 
       const { nextStage: ns, entry } = await advanceClaim(
         id, claim.current_stage,
-        { stage_date: advDate, description, handler: advHandler || user?.displayName || '' },
+        { stage_date: advDate, description, handler: advHandler || user?.displayName || '', handler_dept: advHandlerDept },
         user
       );
       updateClaimStage(id, ns, entry);
       setAdvDesc('');
       setAdvHandler('');
+      setAdvHandlerDept('');
       setSelectedCauses([]);
       setEtcDetail('');
       setAnalysisDetail('');
@@ -202,21 +209,43 @@ export default function ClaimDetail() {
   /* ── 수정 모드 시작 ── */
   const startEdit = () => {
     setEditForm({
-      customer_group:     claim.customer_group || '',
-      customer_name:      claim.customer_name || '',
-      occurrence_date:    claim.occurrence_date || '',
-      receipt_date:       claim.receipt_date || '',
-      sales_rep_name:     claim.sales_rep_name || '',
+      customer_group:     claim.customer_group    || '',
+      customer_name:      claim.customer_name     || '',
+      occurrence_date:    claim.occurrence_date   || '',
+      receipt_date:       claim.receipt_date      || '',
+      sales_rep_dept:     claim.sales_rep_dept    || '',
+      sales_rep_name:     claim.sales_rep_name    || '',
       sales_rep_contact:  claim.sales_rep_contact || '',
-      part_number:        claim.part_number || '',
-      part_name:          claim.part_name || '',
-      product_type:       claim.product_type || '',
-      quantity:           claim.quantity != null ? String(claim.quantity) : '',
-      lot_number:         claim.lot_number || '',
+      part_number:        claim.part_number       || '',
+      part_name:          claim.part_name         || '',
+      product_type:       claim.product_type      || '',
+      product_category:   claim.product_category  || '',
+      quantity:           claim.quantity    != null ? String(claim.quantity)    : '',
+      lot_number:         claim.lot_number        || '',
       defect_quantity:    claim.defect_quantity != null ? String(claim.defect_quantity) : '',
       defect_description: claim.defect_description || '',
     });
     setEditMode(true);
+  };
+
+  /* ── 이력 항목 저장 ── */
+  const handleSaveEntry = async () => {
+    setSavingEntry(true);
+    try {
+      await updateStageEntry(editingEntryId, {
+        stage_date:   entryEdit.stage_date,
+        description:  entryEdit.description,
+        handler:      entryEdit.handler,
+        handler_dept: entryEdit.handler_dept,
+      });
+      patchStageEntry(editingEntryId, entryEdit);
+      setEditingEntryId(null);
+      toast('수정 완료', '이력이 수정되었습니다', 'success');
+    } catch (err) {
+      toast('수정 실패', err.message, 'error');
+    } finally {
+      setSavingEntry(false);
+    }
   };
 
   const setEF = (key) => (e) => setEditForm(prev => ({ ...prev, [key]: e.target.value }));
@@ -228,17 +257,19 @@ export default function ClaimDetail() {
     setSaving(true);
     try {
       const payload = {
-        customer_group:     editForm.customer_group || null,
+        customer_group:     editForm.customer_group    || null,
         customer_name:      editForm.customer_name.trim(),
-        occurrence_date:    editForm.occurrence_date || null,
-        receipt_date:       editForm.receipt_date || null,
-        sales_rep_name:     editForm.sales_rep_name.trim() || null,
+        occurrence_date:    editForm.occurrence_date   || null,
+        receipt_date:       editForm.receipt_date      || null,
+        sales_rep_dept:     editForm.sales_rep_dept    || null,
+        sales_rep_name:     editForm.sales_rep_name.trim()    || null,
         sales_rep_contact:  editForm.sales_rep_contact.trim() || null,
-        part_number:        editForm.part_number.trim() || null,
-        part_name:          editForm.part_name.trim() || null,
-        product_type:       editForm.product_type || null,
-        quantity:           editForm.quantity !== '' ? parseInt(editForm.quantity) : null,
-        lot_number:         editForm.lot_number.trim() || null,
+        part_number:        editForm.part_number.trim()       || null,
+        part_name:          editForm.part_name.trim()         || null,
+        product_type:       editForm.product_type      || null,
+        product_category:   editForm.product_category  || null,
+        quantity:           editForm.quantity    !== '' ? parseInt(editForm.quantity)    : null,
+        lot_number:         editForm.lot_number.trim()        || null,
         defect_quantity:    editForm.defect_quantity !== '' ? parseInt(editForm.defect_quantity) : null,
         defect_description: editForm.defect_description.trim(),
       };
@@ -300,17 +331,24 @@ export default function ClaimDetail() {
           <span style={{ color: '#3b82f6' }}>{nextStage}</span> 단계로 진행
         </div>
 
-        {/* 공통: 처리일 + 담당자 */}
-        <div className="form-grid form-cols-2" style={{ marginBottom: 12 }}>
+        {/* 공통: 처리일 + 부서 + 담당자 */}
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 12, marginBottom: 12 }}>
           <div className="form-group">
             <label>처리일</label>
             <input type="date" value={advDate} onChange={e => setAdvDate(e.target.value)} />
           </div>
           <div className="form-group">
+            <label>담당 부서</label>
+            <select value={advHandlerDept} onChange={e => setAdvHandlerDept(e.target.value)}>
+              <option value="">부서 선택</option>
+              {DEPARTMENTS.map(d => <option key={d} value={d}>{d}</option>)}
+            </select>
+          </div>
+          <div className="form-group">
             <label>
-              담당자
+              담당자 이름
               <span style={{ fontSize: 10, color: '#94a3b8', marginLeft: 6, fontWeight: 400 }}>
-                (비우면 로그인 이름 자동 기록)
+                (선택)
               </span>
             </label>
             <input
@@ -610,6 +648,13 @@ export default function ClaimDetail() {
                 <input type="date" value={editForm.receipt_date} onChange={setEF('receipt_date')} />
               </div>
               <div className="form-group">
+                <label>영업담당 부서</label>
+                <select value={editForm.sales_rep_dept} onChange={setEF('sales_rep_dept')}>
+                  <option value="">부서 선택</option>
+                  {DEPARTMENTS.map(d => <option key={d} value={d}>{d}</option>)}
+                </select>
+              </div>
+              <div className="form-group">
                 <label>영업담당자</label>
                 <input value={editForm.sales_rep_name} onChange={setEF('sales_rep_name')} placeholder="이름" />
               </div>
@@ -661,6 +706,23 @@ export default function ClaimDetail() {
                   })}
                 </div>
               </div>
+              <div className="form-group form-span-4">
+                <label>품목군</label>
+                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                  {PRODUCT_CATEGORIES.map(c => (
+                    <button key={c} type="button"
+                      onClick={() => setEditForm(prev => ({ ...prev, product_category: prev.product_category === c ? '' : c }))}
+                      style={{
+                        padding: '5px 14px', borderRadius: 20, fontSize: 12, fontWeight: 600,
+                        cursor: 'pointer', border: '1.5px solid', fontFamily: 'inherit',
+                        background: editForm.product_category === c ? '#7c3aed' : '#fff',
+                        color: editForm.product_category === c ? '#fff' : '#64748b',
+                        borderColor: editForm.product_category === c ? '#7c3aed' : '#e2e8f0',
+                      }}
+                    >{c}</button>
+                  ))}
+                </div>
+              </div>
               <div className="form-group">
                 <label>불량 수량 (EA)</label>
                 <input type="number" min="0" value={editForm.defect_quantity} onChange={setEF('defect_quantity')} placeholder="0" />
@@ -700,10 +762,12 @@ export default function ClaimDetail() {
               { label: '품번',          value: claim.part_number || '-', mono: true },
               { label: '품명',          value: claim.part_name || '-' },
               { label: '품목 유형',     value: claim.product_type || '-', typeChip: claim.product_type },
-              { label: '출고 수량',      value: claim.quantity != null ? Number(claim.quantity).toLocaleString() + ' EA' : '-' },
+              { label: '품목군',        value: claim.product_category || '-', catChip: claim.product_category },
+              { label: '출고 수량',     value: claim.quantity != null ? Number(claim.quantity).toLocaleString() + ' EA' : '-' },
               { label: 'LOT 번호',      value: claim.lot_number || '-', mono: true },
               { label: '불량 수량',     value: claim.defect_quantity != null ? Number(claim.defect_quantity).toLocaleString() + ' EA' : '-' },
               { label: '불량률',        value: null, defRate: true },
+              { label: '영업 부서',     value: claim.sales_rep_dept || '-' },
               { label: '영업담당자',    value: claim.sales_rep_name || '-' },
               { label: '담당자 연락처', value: claim.sales_rep_contact || '-' },
               { label: '불량 내용',     value: claim.defect_description || '-', span: 2 },
@@ -716,6 +780,8 @@ export default function ClaimDetail() {
                     ? <span style={{ background: '#0f172a', color: '#fff', padding: '2px 10px', borderRadius: 12, fontSize: 12, fontWeight: 600 }}>{item.chip}</span>
                     : item.typeChip
                       ? <span style={{ background: '#dbeafe', color: '#1e40af', padding: '2px 10px', borderRadius: 12, fontSize: 12, fontWeight: 600 }}>{item.typeChip}</span>
+                      : item.catChip
+                        ? <span style={{ background: '#ede9fe', color: '#5b21b6', padding: '2px 10px', borderRadius: 12, fontSize: 12, fontWeight: 600 }}>{item.catChip}</span>
                       : item.defRate
                         ? (() => {
                             const q = claim.quantity; const dq = claim.defect_quantity;
@@ -755,22 +821,81 @@ export default function ClaimDetail() {
             {history.map((entry, i) => {
               const sc = STAGE_COLORS[entry.stage_name] || { dot: '#94a3b8' };
               const displayName = entry.user_name || entry.user_email || entry.handler || '';
+              const isEditing = editingEntryId === entry.id;
               return (
                 <div key={entry.id || i} className="tl-item">
                   <div className="tl-dot" style={{ background: sc.dot }} />
                   <div className="tl-content">
-                    <div className="tl-header">
-                      <span className="tl-stage">{entry.stage_name}</span>
-                      {entry.stage_date && <span className="tl-date">{entry.stage_date}</span>}
-                    </div>
-                    {entry.description && renderDescription(entry.description)}
-                    {displayName && (
-                      <div className="tl-handler">
-                        👤 {displayName}
-                        {entry.user_email && entry.user_name && (
-                          <span style={{ color: '#94a3b8', marginLeft: 4 }}>({entry.user_email})</span>
-                        )}
+                    <div className="tl-header" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                        <span className="tl-stage">{entry.stage_name}</span>
+                        {entry.stage_date && <span className="tl-date">{entry.stage_date}</span>}
                       </div>
+                      {user && !isEditing && (
+                        <button
+                          className="btn btn-ghost btn-sm no-print"
+                          style={{ fontSize: 11, padding: '2px 8px' }}
+                          onClick={() => {
+                            setEditingEntryId(entry.id);
+                            setEntryEdit({
+                              stage_date:   entry.stage_date || '',
+                              description:  entry.description || '',
+                              handler:      entry.handler || '',
+                              handler_dept: entry.handler_dept || '',
+                            });
+                          }}
+                        >✏️ 수정</button>
+                      )}
+                    </div>
+
+                    {isEditing ? (
+                      <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 8, padding: 12, marginTop: 8 }}>
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10, marginBottom: 10 }}>
+                          <div className="form-group">
+                            <label style={{ fontSize: 11 }}>처리일</label>
+                            <input type="date" value={entryEdit.stage_date || ''} onChange={e => setEntryEdit(p => ({ ...p, stage_date: e.target.value }))} />
+                          </div>
+                          <div className="form-group">
+                            <label style={{ fontSize: 11 }}>담당 부서</label>
+                            <select value={entryEdit.handler_dept || ''} onChange={e => setEntryEdit(p => ({ ...p, handler_dept: e.target.value }))}>
+                              <option value="">부서 선택</option>
+                              {DEPARTMENTS.map(d => <option key={d} value={d}>{d}</option>)}
+                            </select>
+                          </div>
+                          <div className="form-group">
+                            <label style={{ fontSize: 11 }}>담당자</label>
+                            <input value={entryEdit.handler || ''} onChange={e => setEntryEdit(p => ({ ...p, handler: e.target.value }))} />
+                          </div>
+                        </div>
+                        <div className="form-group" style={{ marginBottom: 10 }}>
+                          <label style={{ fontSize: 11 }}>처리 내용</label>
+                          <textarea
+                            rows={2}
+                            value={entryEdit.description || ''}
+                            onChange={e => setEntryEdit(p => ({ ...p, description: e.target.value }))}
+                            style={{ resize: 'vertical', width: '100%' }}
+                          />
+                        </div>
+                        <div style={{ display: 'flex', gap: 6 }}>
+                          <button className="btn btn-primary btn-sm" onClick={handleSaveEntry} disabled={savingEntry}>
+                            {savingEntry ? '저장 중...' : '💾 저장'}
+                          </button>
+                          <button className="btn btn-ghost btn-sm" onClick={() => setEditingEntryId(null)}>취소</button>
+                        </div>
+                      </div>
+                    ) : (
+                      <>
+                        {entry.description && renderDescription(entry.description)}
+                        {(displayName || entry.handler_dept) && (
+                          <div className="tl-handler">
+                            👤 {entry.handler_dept && <span style={{ fontSize: 11, background: '#f1f5f9', color: '#475569', padding: '1px 6px', borderRadius: 4, marginRight: 4 }}>{entry.handler_dept}</span>}
+                            {displayName}
+                            {entry.user_email && entry.user_name && (
+                              <span style={{ color: '#94a3b8', marginLeft: 4 }}>({entry.user_email})</span>
+                            )}
+                          </div>
+                        )}
+                      </>
                     )}
                   </div>
                 </div>

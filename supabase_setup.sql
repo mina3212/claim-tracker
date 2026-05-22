@@ -29,12 +29,14 @@ CREATE TABLE IF NOT EXISTS claims (
   part_number        TEXT,
   part_name          TEXT,
   product_type       TEXT,              -- 수입품 / 자체제작상품 / 내수품
+  product_category   TEXT,              -- 광분배함류 / 광접속함체류 / 광커넥터류 / 광점퍼코드류 / 동자재 / 기타
   quantity           INTEGER,
   defect_quantity    INTEGER,
   lot_number         TEXT,
   defect_description TEXT,
   occurrence_date    DATE,
   receipt_date       DATE,
+  sales_rep_dept     TEXT,              -- 영업담당자 부서
   sales_rep_name     TEXT,
   sales_rep_contact  TEXT,
   current_stage      TEXT DEFAULT '접수'
@@ -46,6 +48,8 @@ CREATE TABLE IF NOT EXISTS claims (
 -- ALTER TABLE claims ADD COLUMN IF NOT EXISTS customer_group TEXT;
 -- ALTER TABLE claims ADD COLUMN IF NOT EXISTS product_type TEXT;
 -- ALTER TABLE claims ADD COLUMN IF NOT EXISTS defect_quantity INTEGER;
+-- ALTER TABLE claims ADD COLUMN IF NOT EXISTS product_category TEXT;   -- 품목군 (광분배함류 등)
+-- ALTER TABLE claims ADD COLUMN IF NOT EXISTS sales_rep_dept TEXT;     -- 영업담당자 부서
 
 -- 3. 처리 단계 이력 (작업자 추적 포함)
 CREATE TABLE IF NOT EXISTS claim_stages (
@@ -54,12 +58,16 @@ CREATE TABLE IF NOT EXISTS claim_stages (
   stage_name  TEXT NOT NULL,
   stage_date  DATE,
   description TEXT,
-  handler     TEXT,           -- 직접 입력 담당자명
+  handler      TEXT,           -- 직접 입력 담당자명
+  handler_dept TEXT,           -- 담당 부서
   user_id     TEXT,           -- 로그인한 사용자 ID (자동)
   user_email  TEXT,           -- 로그인한 사용자 이메일 (자동)
   user_name   TEXT,           -- 로그인한 사용자 등록 이름 (자동)
   created_at  TIMESTAMPTZ DEFAULT NOW()
 );
+
+-- ※ 기존 claim_stages 테이블에 컬럼 추가
+-- ALTER TABLE claim_stages ADD COLUMN IF NOT EXISTS handler_dept TEXT;
 
 -- 4. 품번/품명 마스터
 CREATE TABLE IF NOT EXISTS parts (
@@ -96,6 +104,7 @@ CREATE POLICY "claims_delete"  ON claims FOR DELETE USING (auth.role() = 'authen
 -- claim_stages: 읽기 전체 공개 / 쓰기는 인증 필요
 CREATE POLICY "stages_select" ON claim_stages FOR SELECT USING (true);
 CREATE POLICY "stages_insert" ON claim_stages FOR INSERT WITH CHECK (auth.role() = 'authenticated');
+CREATE POLICY "stages_update" ON claim_stages FOR UPDATE USING (auth.role() = 'authenticated');
 CREATE POLICY "stages_delete" ON claim_stages FOR DELETE USING (auth.role() = 'authenticated');
 
 -- parts: 읽기 전체 공개 / 쓰기는 인증 필요

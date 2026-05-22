@@ -16,8 +16,10 @@ export const STAGE_COLORS = {
   '종결':           { bg: '#d1fae5', text: '#065f46', dot: '#10b981' },
 };
 
-export const CUSTOMER_GROUPS = ['KT', 'LG', 'SK', '해외고객사', '온라인몰', '기타'];
-export const PRODUCT_TYPES   = ['수입품', '자체제작상품', '내수품'];
+export const CUSTOMER_GROUPS     = ['KT', 'LG', 'SK', '해외고객사', '온라인몰', '기타'];
+export const PRODUCT_TYPES       = ['수입품', '자체제작상품', '내수품'];
+export const PRODUCT_CATEGORIES  = ['광분배함류', '광접속함체류', '광커넥터류', '광점퍼코드류', '동자재', '기타'];
+export const DEPARTMENTS         = ['영업팀', '마케팅팀', '품질기술팀', '영업관리팀'];
 
 export const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
 
@@ -90,7 +92,8 @@ export async function insertClaim(data, user) {
     stage_name: '접수',
     stage_date: data.receipt_date || new Date().toISOString().slice(0, 10),
     description: '클레임 최초 접수',
-    handler: data.sales_rep_name || '',
+    handler:      data.sales_rep_name || '',
+    handler_dept: data.sales_rep_dept || '',
     user_id:    user?.id    || null,
     user_email: user?.email || null,
     user_name:  user?.user_metadata?.name || null,
@@ -101,7 +104,7 @@ export async function insertClaim(data, user) {
   return { claim, firstEntry };
 }
 
-export async function advanceClaim(claimId, currentStage, { stage_date, description, handler }, user) {
+export async function advanceClaim(claimId, currentStage, { stage_date, description, handler, handler_dept }, user) {
   const idx = STAGES.indexOf(currentStage);
   if (idx < 0 || idx >= STAGES.length - 1) throw new Error('이미 최종 단계입니다.');
   const nextStage = STAGES[idx + 1];
@@ -114,11 +117,12 @@ export async function advanceClaim(claimId, currentStage, { stage_date, descript
 
   const entry = {
     id: uid(),
-    claim_id:   claimId,
-    stage_name: nextStage,
-    stage_date: stage_date || new Date().toISOString().slice(0, 10),
-    description: description || '',
-    handler:    handler || '',
+    claim_id:     claimId,
+    stage_name:   nextStage,
+    stage_date:   stage_date || new Date().toISOString().slice(0, 10),
+    description:  description || '',
+    handler:      handler || '',
+    handler_dept: handler_dept || '',
     user_id:    user?.id    || null,
     user_email: user?.email || null,
     user_name:  user?.user_metadata?.name || null,
@@ -140,10 +144,15 @@ export async function deleteClaim(id) {
   if (error) throw error;
 }
 
-export async function updateStageEntry(id, { stage_date, description, handler }) {
+export async function updateStageEntry(id, { stage_date, description, handler, handler_dept }) {
   const { error } = await sb
     .from('claim_stages')
-    .update({ stage_date: stage_date || null, description: description || '', handler: handler || '' })
+    .update({
+      stage_date:   stage_date   || null,
+      description:  description  || '',
+      handler:      handler      || '',
+      handler_dept: handler_dept || '',
+    })
     .eq('id', id);
   if (error) throw error;
 }

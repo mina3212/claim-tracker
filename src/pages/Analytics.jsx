@@ -9,11 +9,11 @@ import { useClaims } from '../context/ClaimsContext';
 import { useAuth } from '../context/AuthContext';
 import { usePrintTitle } from '../context/PrintContext';
 import StageBadge from '../components/StageBadge';
-import { STAGES, STAGE_COLORS, CUSTOMER_GROUPS, PRODUCT_TYPES } from '../lib/supabase';
+import { STAGES, STAGE_COLORS, CUSTOMER_GROUPS, PRODUCT_TYPES, PRODUCT_CATEGORIES } from '../lib/supabase';
 
 const COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#8b5cf6', '#f97316', '#ef4444', '#06b6d4', '#84cc16', '#ec4899', '#64748b'];
 const CAUSE_OPTIONS = ['사용자 과실', '생산공정', '제품불량', '구조불량', '배송오류', '기타'];
-const TABS = ['고객사별', '품목별', '그룹별', '원인별', '월별 추이'];
+const TABS = ['고객사별', '품목별', '그룹별', '품목군별', '원인별', '월별 추이'];
 
 function parseCauses(description) {
   if (!description) return [];
@@ -334,6 +334,32 @@ export default function Analytics() {
     });
     return Object.entries(total).filter(([, v]) => v > 0).sort(([, a], [, b]) => b - a)
       .map(([name, value]) => ({ name, value }));
+  }, [filteredClaims, causesByClaimId]);
+
+  /* ── 품목군별 분석 ── */
+  const productCategoryAnalysis = useMemo(() => {
+    const allCats = [...PRODUCT_CATEGORIES, '(미분류)'];
+    return allCats.map(cat => {
+      const cs = cat === '(미분류)'
+        ? filteredClaims.filter(c => !c.product_category)
+        : filteredClaims.filter(c => c.product_category === cat);
+      if (cs.length === 0) return null;
+      const stats = buildGroupStats(cs);
+      return { name: cat, ...stats, claims: cs };
+    }).filter(Boolean);
+  }, [filteredClaims, causesByClaimId]);
+
+  /* ── 품목유형별 분석 ── */
+  const productTypeAnalysis = useMemo(() => {
+    const allTypes = [...PRODUCT_TYPES, '(미분류)'];
+    return allTypes.map(type => {
+      const cs = type === '(미분류)'
+        ? filteredClaims.filter(c => !c.product_type)
+        : filteredClaims.filter(c => c.product_type === type);
+      if (cs.length === 0) return null;
+      const stats = buildGroupStats(cs);
+      return { name: type, ...stats, claims: cs };
+    }).filter(Boolean);
   }, [filteredClaims, causesByClaimId]);
 
   /* ── 월별 데이터 ── */
@@ -816,6 +842,116 @@ export default function Analytics() {
                   );
                 })}
               </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ── 품목군별 탭 ── */}
+      {tab === '품목군별' && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+          {/* 품목군 분석 */}
+          <div className="card">
+            <div className="card-title">📦 품목군별 클레임 현황</div>
+            {productCategoryAnalysis.length === 0 ? (
+              <div className="empty">
+                <div className="empty-icon">📦</div>
+                품목군 데이터가 없습니다<br/>
+                <span style={{ fontSize: 12, color: '#94a3b8' }}>클레임 접수 시 품목군을 선택하면 분석됩니다</span>
+              </div>
+            ) : (
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(160px, 1fr))', gap: 12 }}>
+                {productCategoryAnalysis.map((item, i) => (
+                  <div key={item.name} style={{
+                    background: '#f8fafc', borderRadius: 10, padding: '14px 18px',
+                    border: `1px solid ${COLORS[i % COLORS.length]}40`,
+                    borderLeft: `3px solid ${COLORS[i % COLORS.length]}`,
+                  }}>
+                    <div style={{ fontSize: 13, fontWeight: 700, color: '#334155', marginBottom: 6 }}>{item.name}</div>
+                    <div style={{ fontSize: 26, fontWeight: 700, color: COLORS[i % COLORS.length] }}>{item.total}</div>
+                    <div style={{ fontSize: 11, color: '#64748b', marginTop: 4 }}>
+                      종결 {item.closed}건 · <span style={{ color: closeColor(item.closeRate), fontWeight: 600 }}>{item.closeRate}%</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {productCategoryAnalysis.length > 0 && (
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
+              <div className="card">
+                <div className="card-title">📊 품목군별 클레임 건수</div>
+                <ResponsiveContainer width="100%" height={240}>
+                  <BarChart data={productCategoryAnalysis.map(c => ({ name: c.name, count: c.total }))} layout="vertical" margin={{ top: 4, right: 16, bottom: 4, left: 0 }}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
+                    <XAxis type="number" tick={{ fontSize: 11 }} allowDecimals={false} />
+                    <YAxis type="category" dataKey="name" tick={{ fontSize: 11 }} width={90} />
+                    <Tooltip formatter={v => [v + '건', '클레임']} />
+                    <Bar dataKey="count" radius={[0, 4, 4, 0]}>
+                      {productCategoryAnalysis.map((_, i) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}
+                    </Bar>
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+              <div className="card">
+                <div className="card-title">📊 품목군별 종결율</div>
+                <ResponsiveContainer width="100%" height={240}>
+                  <BarChart data={productCategoryAnalysis.map(c => ({ name: c.name, rate: c.closeRate }))} layout="vertical" margin={{ top: 4, right: 16, bottom: 4, left: 0 }}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
+                    <XAxis type="number" tick={{ fontSize: 11 }} domain={[0, 100]} tickFormatter={v => v + '%'} />
+                    <YAxis type="category" dataKey="name" tick={{ fontSize: 11 }} width={90} />
+                    <Tooltip formatter={v => [v + '%', '종결율']} />
+                    <Bar dataKey="rate" radius={[0, 4, 4, 0]}>
+                      {productCategoryAnalysis.map((c, i) => <Cell key={i} fill={closeColor(c.closeRate)} />)}
+                    </Bar>
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+            </div>
+          )}
+
+          {/* 품목유형 분석 */}
+          <div className="card">
+            <div className="card-title">🏷 품목 유형별 현황</div>
+            {productTypeAnalysis.length === 0 ? (
+              <div className="empty">
+                <div className="empty-icon">🏷</div>
+                품목 유형 데이터가 없습니다
+              </div>
+            ) : (
+              <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
+                {productTypeAnalysis.map((item, i) => (
+                  <div key={item.name} style={{
+                    flex: 1, minWidth: 160, background: '#f8fafc', borderRadius: 10,
+                    padding: '14px 18px', border: '1px solid #e2e8f0',
+                    borderLeft: `3px solid ${COLORS[(i + 3) % COLORS.length]}`,
+                  }}>
+                    <div style={{ fontSize: 13, fontWeight: 700, color: '#1e40af', marginBottom: 6 }}>{item.name}</div>
+                    <div style={{ fontSize: 26, fontWeight: 700 }}>{item.total}건</div>
+                    <div style={{ fontSize: 11, color: '#64748b', marginTop: 4 }}>
+                      종결 {item.closed}건 · <span style={{ color: closeColor(item.closeRate), fontWeight: 600 }}>{item.closeRate}%</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {productTypeAnalysis.length > 0 && (
+            <div className="card">
+              <div className="card-title">📊 품목 유형별 클레임 건수</div>
+              <ResponsiveContainer width="100%" height={180}>
+                <BarChart data={productTypeAnalysis.map(t => ({ name: t.name, count: t.total }))} margin={{ top: 4, right: 16, bottom: 4, left: -8 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
+                  <XAxis dataKey="name" tick={{ fontSize: 12 }} />
+                  <YAxis tick={{ fontSize: 11 }} allowDecimals={false} />
+                  <Tooltip formatter={v => [v + '건', '클레임']} />
+                  <Bar dataKey="count" radius={[4, 4, 0, 0]}>
+                    {productTypeAnalysis.map((_, i) => <Cell key={i} fill={COLORS[(i + 3) % COLORS.length]} />)}
+                  </Bar>
+                </BarChart>
+              </ResponsiveContainer>
             </div>
           )}
         </div>
