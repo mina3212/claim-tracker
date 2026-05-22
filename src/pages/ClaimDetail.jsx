@@ -123,8 +123,8 @@ export default function ClaimDetail() {
 
   /* ── 단계 진행 ── */
   const handleAdvance = async () => {
-    if (nextStage && history.some(h => h.stage_name === nextStage)) {
-      toast('중복 등록 불가', `"${nextStage}" 단계는 이미 등록된 건입니다`, 'error');
+    if (history.some(h => h.stage_name === claim.current_stage)) {
+      toast('중복 등록 불가', `"${claim.current_stage}" 단계는 이미 처리된 건입니다`, 'error');
       return;
     }
 
@@ -332,8 +332,8 @@ export default function ClaimDetail() {
     return (
       <div className="advance-section">
         <div style={{ fontSize: 13, fontWeight: 600, color: '#0f172a', marginBottom: 12 }}>
-          {STAGE_ICONS[currentIdx + 1]}&nbsp;
-          <span style={{ color: '#3b82f6' }}>{nextStage}</span> 단계로 진행
+          {STAGE_ICONS[currentIdx]}&nbsp;
+          <span style={{ color: '#3b82f6' }}>{claim.current_stage}</span> 처리 결과 입력
         </div>
 
         {/* 공통: 처리일 + 부서 + 담당자 */}
@@ -493,7 +493,7 @@ export default function ClaimDetail() {
 
         <div className="form-actions">
           <button className="btn btn-success" onClick={handleAdvance} disabled={advancing}>
-            {advancing ? '처리 중...' : `→ ${nextStage}으로 진행`}
+            {advancing ? '처리 중...' : `✅ ${claim.current_stage} 완료`}
           </button>
         </div>
       </div>

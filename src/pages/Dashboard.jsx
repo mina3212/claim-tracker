@@ -89,7 +89,17 @@ export default function Dashboard() {
           <div className="page-title">대시보드</div>
           <div className="page-sub">고객사 클레임 전체 현황</div>
         </div>
-        <button className="btn btn-primary" onClick={() => navigate('/claims/new')}>➕ 클레임 접수</button>
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+          <button
+            className="btn btn-ghost btn-sm"
+            onClick={() => window.open('/manual', '_blank')}
+            style={{ fontSize: 12, color: '#64748b', border: '1px solid #e2e8f0' }}
+            title="사용 매뉴얼 보기"
+          >
+            📖 사용 매뉴얼
+          </button>
+          <button className="btn btn-primary" onClick={() => navigate('/claims/new')}>➕ 클레임 접수</button>
+        </div>
       </div>
 
       {/* Summary KPIs */}

@@ -51,6 +51,9 @@ CREATE TABLE IF NOT EXISTS claims (
 -- ALTER TABLE claims ADD COLUMN IF NOT EXISTS product_category TEXT;   -- 품목군 (광분배함류 등)
 -- ALTER TABLE claims ADD COLUMN IF NOT EXISTS sales_rep_dept TEXT;     -- 영업담당자 부서
 
+-- ※ 단계 흐름 변경: 접수 즉시 1차 대응으로 시작 (기존 데이터 마이그레이션)
+-- UPDATE claims SET current_stage = '1차 대응' WHERE current_stage = '접수';
+
 -- 3. 처리 단계 이력 (작업자 추적 포함)
 CREATE TABLE IF NOT EXISTS claim_stages (
   id          TEXT PRIMARY KEY,

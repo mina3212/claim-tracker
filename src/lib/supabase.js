@@ -80,7 +80,7 @@ export async function insertClaim(data, user) {
   const claim = {
     ...data,
     id: uid(),
-    current_stage: '접수',
+    current_stage: '1차 대응',   // 접수 즉시 1차 대응 단계로 시작
     created_at: new Date().toISOString(),
   };
   const { error } = await sb.from('claims').insert(claim);
@@ -109,13 +109,14 @@ export async function advanceClaim(claimId, currentStage, { stage_date, descript
   if (idx < 0 || idx >= STAGES.length - 1) throw new Error('이미 최종 단계입니다.');
   const nextStage = STAGES[idx + 1];
 
+  // 현재 단계 이력이 이미 있으면 중복 방지
   const { data: existing } = await sb
     .from('claim_stages')
     .select('id')
     .eq('claim_id', claimId)
-    .eq('stage_name', nextStage)
+    .eq('stage_name', currentStage)
     .limit(1);
-  if (existing && existing.length > 0) throw new Error(`"${nextStage}" 단계는 이미 등록된 건입니다.`);
+  if (existing && existing.length > 0) throw new Error(`"${currentStage}" 단계는 이미 등록된 건입니다.`);
 
   const { error: ue } = await sb
     .from('claims')
@@ -123,10 +124,11 @@ export async function advanceClaim(claimId, currentStage, { stage_date, descript
     .eq('id', claimId);
   if (ue) throw ue;
 
+  // 현재 단계의 처리 결과를 이력으로 기록
   const entry = {
     id: uid(),
     claim_id:     claimId,
-    stage_name:   nextStage,
+    stage_name:   currentStage,
     stage_date:   stage_date || new Date().toISOString().slice(0, 10),
     description:  description || '',
     handler:      handler || '',
@@ -138,6 +140,24 @@ export async function advanceClaim(claimId, currentStage, { stage_date, descript
   };
   const { error: ie } = await sb.from('claim_stages').insert(entry);
   if (ie) throw ie;
+
+  // 종결 단계 도달 시 종결 이력 자동 생성
+  if (nextStage === '종결') {
+    const closeEntry = {
+      id: uid(),
+      claim_id:   claimId,
+      stage_name: '종결',
+      stage_date: stage_date || new Date().toISOString().slice(0, 10),
+      description: '클레임 종결 처리',
+      handler:      handler || '',
+      handler_dept: handler_dept || '',
+      user_id:    user?.id    || null,
+      user_email: user?.email || null,
+      user_name:  user?.user_metadata?.name || null,
+      created_at: new Date().toISOString(),
+    };
+    await sb.from('claim_stages').insert(closeEntry);
+  }
 
   return { nextStage, entry };
 }
