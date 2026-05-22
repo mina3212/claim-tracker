@@ -123,6 +123,11 @@ export default function ClaimDetail() {
 
   /* ── 단계 진행 ── */
   const handleAdvance = async () => {
+    if (nextStage && history.some(h => h.stage_name === nextStage)) {
+      toast('중복 등록 불가', `"${nextStage}" 단계는 이미 등록된 건입니다`, 'error');
+      return;
+    }
+
     // 1차 대응 → 회수품 원인분석: 처리내용 필수
     if (claim.current_stage === '1차 대응') {
       if (!advDesc.trim()) {

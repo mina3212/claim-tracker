@@ -109,6 +109,14 @@ export async function advanceClaim(claimId, currentStage, { stage_date, descript
   if (idx < 0 || idx >= STAGES.length - 1) throw new Error('이미 최종 단계입니다.');
   const nextStage = STAGES[idx + 1];
 
+  const { data: existing } = await sb
+    .from('claim_stages')
+    .select('id')
+    .eq('claim_id', claimId)
+    .eq('stage_name', nextStage)
+    .limit(1);
+  if (existing && existing.length > 0) throw new Error(`"${nextStage}" 단계는 이미 등록된 건입니다.`);
+
   const { error: ue } = await sb
     .from('claims')
     .update({ current_stage: nextStage })
