@@ -165,13 +165,22 @@ export async function resolveDeleteRequest(id, status) {
 
 // ── Parts master ──────────────────────────────────────────────
 export async function fetchParts() {
-  const { data, error } = await sb
-    .from('parts')
-    .select('*')
-    .order('part_number')
-    .range(0, 9999);
-  if (error) throw error;
-  return data || [];
+  const pageSize = 1000;
+  let all = [];
+  let from = 0;
+  while (true) {
+    const { data, error } = await sb
+      .from('parts')
+      .select('*')
+      .order('part_number')
+      .range(from, from + pageSize - 1);
+    if (error) throw error;
+    if (!data || data.length === 0) break;
+    all = all.concat(data);
+    if (data.length < pageSize) break;
+    from += pageSize;
+  }
+  return all;
 }
 
 export async function upsertParts(rows) {
