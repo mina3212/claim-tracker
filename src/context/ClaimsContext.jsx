@@ -64,11 +64,15 @@ export function ClaimsProvider({ children }) {
     setDeleteRequests(prev => prev.filter(r => r.id !== id));
   }, []);
 
+  const patchStageEntry = useCallback((id, data) => {
+    setStages(prev => prev.map(s => s.id === id ? { ...s, ...data } : s));
+  }, []);
+
   return (
     <ClaimsCtx.Provider value={{
       claims, stages, deleteRequests, loading, dbReady,
       refresh, getStagesFor, addClaim, updateClaimStage, updateClaimData,
-      removeClaim, addDeleteRequest, resolveRequest,
+      removeClaim, addDeleteRequest, resolveRequest, patchStageEntry,
     }}>
       {children}
     </ClaimsCtx.Provider>

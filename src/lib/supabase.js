@@ -124,6 +124,14 @@ export async function deleteClaim(id) {
   if (error) throw error;
 }
 
+export async function updateStageEntry(id, { stage_date, description, handler }) {
+  const { error } = await sb
+    .from('claim_stages')
+    .update({ stage_date: stage_date || null, description: description || '', handler: handler || '' })
+    .eq('id', id);
+  if (error) throw error;
+}
+
 // ── Delete Requests ───────────────────────────────────────────
 export async function insertDeleteRequest(claimId, reason, user) {
   const req = {

@@ -54,19 +54,23 @@ export default function Dashboard() {
 
   const kpiCards = [
     {
-      label: '전체 클레임', value: total, sub: '누적 건', color: '#0f172a', icon: '📋',
+      label: '전체 클레임', value: total, sub: '누적 건',
+      color: '#1e293b', bg: '#f8fafc', border: '#e2e8f0', icon: '📋',
       items: claims,
     },
     {
-      label: '처리 중', value: active, sub: '진행 중인 클레임', color: '#f59e0b', icon: '⏳',
+      label: '처리 중', value: active, sub: '진행 중인 클레임',
+      color: '#b45309', bg: '#fffbeb', border: '#fde68a', icon: '⏳',
       items: claims.filter(c => c.current_stage !== '종결'),
     },
     {
-      label: '종결 완료', value: closed, sub: '처리 완료', color: '#10b981', icon: '✅',
+      label: '종결 완료', value: closed, sub: '처리 완료',
+      color: '#065f46', bg: '#ecfdf5', border: '#6ee7b7', icon: '✅',
       items: claims.filter(c => c.current_stage === '종결'),
     },
     {
-      label: '이번 달 신규', value: newThis, sub: thisMonth + ' 기준', color: '#3b82f6', icon: '🆕',
+      label: '이번 달 신규', value: newThis, sub: thisMonth + ' 기준',
+      color: '#1d4ed8', bg: '#eff6ff', border: '#93c5fd', icon: '🆕',
       items: claims.filter(c => (c.receipt_date || c.created_at || '').slice(0, 7) === thisMonth),
     },
   ];
@@ -88,13 +92,20 @@ export default function Dashboard() {
             key={item.label}
             className="kpi-card"
             onClick={() => openModal(item.label, item.icon, item.color, item.items)}
-            style={{ cursor: 'pointer', transition: '.15s' }}
+            style={{
+              cursor: 'pointer', transition: '.15s',
+              background: item.bg,
+              borderColor: item.border,
+            }}
             onMouseEnter={e => { e.currentTarget.style.transform = 'translateY(-2px)'; e.currentTarget.style.boxShadow = '0 4px 16px rgba(0,0,0,.1)'; }}
             onMouseLeave={e => { e.currentTarget.style.transform = ''; e.currentTarget.style.boxShadow = ''; }}
           >
-            <div className="kpi-label">{item.label}</div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 6 }}>
+              <div className="kpi-label" style={{ marginBottom: 0 }}>{item.label}</div>
+              <span style={{ fontSize: 18, lineHeight: 1 }}>{item.icon}</span>
+            </div>
             <div className="kpi-value" style={{ color: item.color }}>{item.value}</div>
-            <div className="kpi-sub">{item.sub} · 클릭해서 보기</div>
+            <div className="kpi-sub">{item.sub}</div>
           </div>
         ))}
       </div>
@@ -107,14 +118,17 @@ export default function Dashboard() {
             <div
               key={stage}
               className="kpi-card"
-              style={{ borderColor: 'transparent', cursor: 'pointer', transition: '.15s' }}
+              style={{
+                borderColor: sc.dot, cursor: 'pointer', transition: '.15s',
+                background: sc.bg,
+              }}
               onClick={() => openModal(stage, STAGE_ICONS[i], sc.dot, claims.filter(c => c.current_stage === stage))}
-              onMouseEnter={e => { e.currentTarget.style.borderColor = sc.dot; e.currentTarget.style.transform = 'translateY(-2px)'; }}
-              onMouseLeave={e => { e.currentTarget.style.borderColor = 'transparent'; e.currentTarget.style.transform = ''; }}
+              onMouseEnter={e => { e.currentTarget.style.transform = 'translateY(-2px)'; e.currentTarget.style.boxShadow = `0 4px 14px ${sc.dot}30`; }}
+              onMouseLeave={e => { e.currentTarget.style.transform = ''; e.currentTarget.style.boxShadow = ''; }}
             >
-              <div className="kpi-label" style={{ color: sc.dot }}>{STAGE_ICONS[i]} {stage}</div>
-              <div className="kpi-value" style={{ color: sc.dot }}>{stageCounts[stage]}</div>
-              <div className="kpi-sub">건 · 클릭해서 보기</div>
+              <div className="kpi-label" style={{ color: sc.dot, marginBottom: 6 }}>{STAGE_ICONS[i]} {stage}</div>
+              <div className="kpi-value" style={{ color: sc.dot, fontSize: 24 }}>{stageCounts[stage]}</div>
+              <div className="kpi-sub">건</div>
             </div>
           );
         })}
