@@ -93,7 +93,7 @@ export default function LoginGate() {
       <div style={{ position: 'fixed', top: -80, left: -80, width: 320, height: 320, borderRadius: '50%', background: 'rgba(59,130,246,.08)', pointerEvents: 'none' }} />
       <div style={{ position: 'fixed', bottom: -60, right: -60, width: 260, height: 260, borderRadius: '50%', background: 'rgba(16,185,129,.07)', pointerEvents: 'none' }} />
 
-      <div style={{
+      <div className="login-outer" style={{
         display: 'flex', borderRadius: 24,
         overflow: 'hidden', width: '100%', maxWidth: 860,
         boxShadow: '0 32px 80px rgba(30,41,59,.13)', position: 'relative',
@@ -143,7 +143,7 @@ export default function LoginGate() {
         </div>
 
         {/* ── 오른쪽 폼 패널 ── */}
-        <div style={{ flex: 1, background: '#fff', padding: '48px 44px', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
+        <div className="login-panel">
 
           <div style={{ marginBottom: 28 }}>
             <div style={{ fontSize: 24, fontWeight: 800, color: '#0f172a', marginBottom: 6 }}>
@@ -202,7 +202,7 @@ export default function LoginGate() {
           {/* 회원가입 폼 */}
           {tab === 'signup' && (
             <form onSubmit={handleSignup} style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+              <div className="login-2col">
                 <InputField label="이름" required>
                   <FocusInput placeholder="홍길동" value={name} onChange={e => setName(e.target.value)} autoFocus required />
                 </InputField>
@@ -213,7 +213,7 @@ export default function LoginGate() {
               <InputField label="이메일" required>
                 <FocusInput type="email" placeholder="example@ajw.co.kr" value={email} onChange={e => setEmail(e.target.value)} required />
               </InputField>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+              <div className="login-2col">
                 <InputField label="비밀번호 (6자 이상)" required>
                   <FocusInput type="password" placeholder="비밀번호" value={password} onChange={e => setPassword(e.target.value)} required />
                 </InputField>
@@ -233,7 +233,11 @@ export default function LoginGate() {
 
       <style>{`
         @media (max-width: 640px) {
-          .login-brand-panel { display: none; }
+          .login-brand-panel { display: none !important; }
+          .login-outer { border-radius: 16px !important; }
+        }
+        @media (max-width: 400px) {
+          .login-outer { border-radius: 0 !important; margin: -20px; width: calc(100% + 40px); min-height: 100vh; }
         }
       `}</style>
     </div>

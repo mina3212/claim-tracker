@@ -103,7 +103,7 @@ export default function Dashboard() {
       </div>
 
       {/* Summary KPIs */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12, marginBottom: 20 }}>
+      <div className="kpi-grid-4">
         {kpiCards.map(item => (
           <div
             key={item.label}

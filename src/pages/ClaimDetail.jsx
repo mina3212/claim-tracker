@@ -346,7 +346,7 @@ export default function ClaimDetail() {
         </div>
 
         {/* 공통: 처리일 + 부서 + 담당자 */}
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 12, marginBottom: 12 }}>
+        <div className="adv-grid-3">
           <div className="form-group">
             <label>처리일</label>
             <input type="date" value={advDate} onChange={e => setAdvDate(e.target.value)} />
@@ -869,7 +869,7 @@ export default function ClaimDetail() {
 
                     {isEditing ? (
                       <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 8, padding: 12, marginTop: 8 }}>
-                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10, marginBottom: 10 }}>
+                        <div className="adv-grid-3" style={{ marginBottom: 10 }}>
                           <div className="form-group">
                             <label style={{ fontSize: 11 }}>처리일</label>
                             <input type="date" value={entryEdit.stage_date || ''} onChange={e => setEntryEdit(p => ({ ...p, stage_date: e.target.value }))} />
