@@ -199,6 +199,19 @@ export async function fetchParts() {
   return all;
 }
 
+export async function searchParts(query) {
+  if (!query || !query.trim()) return [];
+  const q = query.trim();
+  const { data, error } = await sb
+    .from('parts')
+    .select('id, part_number, part_name')
+    .or(`part_number.ilike.%${q}%,part_name.ilike.%${q}%`)
+    .order('part_number')
+    .limit(20);
+  if (error) throw error;
+  return data || [];
+}
+
 export async function upsertParts(rows) {
   const { error } = await sb.from('parts').upsert(rows, { onConflict: 'part_number' });
   if (error) throw error;

@@ -2,7 +2,6 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { ToastProvider }  from './context/ToastContext';
 import { ClaimsProvider } from './context/ClaimsContext';
-import { PartsProvider }  from './context/PartsContext';
 import Layout      from './components/Layout';
 import LoginGate   from './components/LoginGate';
 import Dashboard   from './pages/Dashboard';
@@ -34,21 +33,19 @@ function AppRoutes() {
 
   return (
     <ClaimsProvider>
-      <PartsProvider>
-        <BrowserRouter>
-          <Routes>
-            <Route path="/" element={<Layout />}>
-              <Route index element={<Dashboard />} />
-              <Route path="claims" element={<ClaimList />} />
-              <Route path="claims/new" element={<NewClaim />} />
-              <Route path="claims/:id" element={<ClaimDetail />} />
-              <Route path="analytics" element={<Analytics />} />
-              <Route path="parts" element={<Parts />} />
-              <Route path="*" element={<Navigate to="/" replace />} />
-            </Route>
-          </Routes>
-        </BrowserRouter>
-      </PartsProvider>
+      <BrowserRouter>
+        <Routes>
+          <Route path="/" element={<Layout />}>
+            <Route index element={<Dashboard />} />
+            <Route path="claims" element={<ClaimList />} />
+            <Route path="claims/new" element={<NewClaim />} />
+            <Route path="claims/:id" element={<ClaimDetail />} />
+            <Route path="analytics" element={<Analytics />} />
+            <Route path="parts" element={<Parts />} />
+            <Route path="*" element={<Navigate to="/" replace />} />
+          </Route>
+        </Routes>
+      </BrowserRouter>
     </ClaimsProvider>
   );
 }

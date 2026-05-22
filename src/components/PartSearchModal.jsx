@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { useParts } from '../context/PartsContext';
+import { useState, useEffect } from 'react';
+import { searchParts } from '../lib/supabase';
 
 const OVERLAY = {
   position: 'fixed', inset: 0, background: 'rgba(0,0,0,.5)',
@@ -13,19 +13,21 @@ const MODAL = {
 };
 
 export default function PartSearchModal({ onSelect, onClose }) {
-  const { parts } = useParts();
-  const [query, setQuery] = useState('');
+  const [query,   setQuery]   = useState('');
+  const [results, setResults] = useState([]);
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    if (!query.trim()) { setResults([]); return; }
+    const timer = setTimeout(async () => {
+      setLoading(true);
+      try { setResults(await searchParts(query)); }
+      finally { setLoading(false); }
+    }, 250);
+    return () => clearTimeout(timer);
+  }, [query]);
 
   const partLabel = (p) => p.spec ? `${p.part_name} [${p.spec}]` : p.part_name;
-
-  const filtered = parts.filter(p => {
-    if (!query.trim()) return true;
-    const q = query.toLowerCase();
-    return p.part_number.toLowerCase().includes(q)
-      || p.part_name.toLowerCase().includes(q)
-      || (p.spec || '').toLowerCase().includes(q);
-  }).slice(0, 60);
-
   const handleKey = (e) => { if (e.key === 'Escape') onClose(); };
 
   return (
@@ -51,22 +53,23 @@ export default function PartSearchModal({ onSelect, onClose }) {
         />
 
         <div style={{ fontSize: 11, color: '#94a3b8' }}>
-          선택하면 품번과 품명이 자동으로 채워집니다. {parts.length > 0 ? `(총 ${parts.length}개 품목)` : ''}
+          선택하면 품번과 품명이 자동으로 채워집니다.
         </div>
 
         <div style={{
           overflowY: 'auto', flex: 1,
           border: '1px solid #f1f5f9', borderRadius: 8, minHeight: 120, maxHeight: 360,
         }}>
-          {parts.length === 0 ? (
+          {loading ? (
+            <div style={{ padding: 24, textAlign: 'center', color: '#94a3b8', fontSize: 13 }}>검색 중...</div>
+          ) : !query.trim() ? (
             <div style={{ padding: 24, textAlign: 'center', color: '#94a3b8', fontSize: 13 }}>
-              등록된 품목이 없습니다.<br />
-              <span style={{ fontSize: 11 }}>품번/품명 마스터 페이지에서 품목을 추가하세요.</span>
+              품번 또는 품명을 입력하세요.
             </div>
-          ) : filtered.length === 0 ? (
+          ) : results.length === 0 ? (
             <div style={{ padding: 24, textAlign: 'center', color: '#94a3b8', fontSize: 13 }}>검색 결과가 없습니다</div>
           ) : (
-            filtered.map(p => (
+            results.map(p => (
               <div
                 key={p.id}
                 onClick={() => { onSelect(p.part_number, partLabel(p)); onClose(); }}

@@ -1,39 +1,35 @@
 import { useState, useRef, useEffect } from 'react';
-import { useParts } from '../context/PartsContext';
+import { searchParts } from '../lib/supabase';
 
 export default function PartAutocomplete({ partNumber, partName, onSelect }) {
-  const { parts } = useParts();
-  const [query,      setQuery]      = useState(partNumber || '');
+  const [query,       setQuery]       = useState(partNumber || '');
   const [suggestions, setSuggestions] = useState([]);
-  const [open,       setOpen]       = useState(false);
+  const [open,        setOpen]        = useState(false);
   const wrapRef = useRef();
 
-  // 외부 클릭 시 닫기
   useEffect(() => {
     const handler = (e) => { if (!wrapRef.current?.contains(e.target)) setOpen(false); };
     document.addEventListener('mousedown', handler);
     return () => document.removeEventListener('mousedown', handler);
   }, []);
 
-  // partNumber prop이 외부에서 바뀌면 동기화
   useEffect(() => { setQuery(partNumber || ''); }, [partNumber]);
+
+  useEffect(() => {
+    if (!query.trim()) { setSuggestions([]); setOpen(false); return; }
+    const timer = setTimeout(async () => {
+      const results = await searchParts(query);
+      setSuggestions(results);
+      setOpen(results.length > 0);
+    }, 250);
+    return () => clearTimeout(timer);
+  }, [query]);
 
   const partLabel = (p) => p.spec ? `${p.part_name} [${p.spec}]` : p.part_name;
 
   const handleInput = (val) => {
     setQuery(val);
-    onSelect(val, ''); // 품명 초기화
-    if (!val.trim()) { setSuggestions([]); setOpen(false); return; }
-    const q = val.toLowerCase();
-    const matched = parts
-      .filter(p =>
-        p.part_number.toLowerCase().includes(q)
-        || p.part_name.toLowerCase().includes(q)
-        || (p.spec || '').toLowerCase().includes(q)
-      )
-      .slice(0, 12);
-    setSuggestions(matched);
-    setOpen(matched.length > 0);
+    onSelect(val, '');
   };
 
   const pick = (p) => {
@@ -62,7 +58,7 @@ export default function PartAutocomplete({ partNumber, partName, onSelect }) {
         value={query}
         onChange={e => handleInput(e.target.value)}
         onFocus={() => suggestions.length > 0 && setOpen(true)}
-        placeholder={parts.length > 0 ? '품번 입력 또는 검색' : '품번 입력'}
+        placeholder="품번 입력 또는 검색"
       />
       {open && (
         <div style={{
