@@ -168,7 +168,8 @@ export async function fetchParts() {
   const { data, error } = await sb
     .from('parts')
     .select('*')
-    .order('part_number');
+    .order('part_number')
+    .range(0, 9999);
   if (error) throw error;
   return data || [];
 }
@@ -180,5 +181,10 @@ export async function upsertParts(rows) {
 
 export async function deletePart(id) {
   const { error } = await sb.from('parts').delete().eq('id', id);
+  if (error) throw error;
+}
+
+export async function deleteAllParts() {
+  const { error } = await sb.from('parts').delete().neq('id', '');
   if (error) throw error;
 }

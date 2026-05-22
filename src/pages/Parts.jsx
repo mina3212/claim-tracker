@@ -1,17 +1,19 @@
 import { useState, useEffect, useRef } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
-import { fetchParts, upsertParts, deletePart, uid } from '../lib/supabase';
+import { fetchParts, upsertParts, deletePart, deleteAllParts, uid } from '../lib/supabase';
 
 export default function Parts() {
   const { user, isAdmin } = useAuth();
   const toast    = useToast();
   const fileRef  = useRef();
 
-  const [parts,    setParts]    = useState([]);
-  const [loading,  setLoading]  = useState(true);
-  const [search,   setSearch]   = useState('');
-  const [uploading, setUploading] = useState(false);
+  const [parts,       setParts]       = useState([]);
+  const [loading,     setLoading]     = useState(true);
+  const [search,      setSearch]      = useState('');
+  const [uploading,   setUploading]   = useState(false);
+  const [delAllOpen,  setDelAllOpen]  = useState(false);
+  const [delAllBusy,  setDelAllBusy]  = useState(false);
 
   useEffect(() => { load(); }, []);
 
@@ -55,13 +57,19 @@ export default function Parts() {
         return;
       }
 
+      const seen = new Set();
       const upsertRows = rows
         .filter(r => r[numCol]?.toString().trim())
         .map(r => ({
           id: uid(),
           part_number: r[numCol].toString().trim(),
           part_name:   r[nameCol]?.toString().trim() || '',
-        }));
+        }))
+        .filter(r => {
+          if (seen.has(r.part_number)) return false;
+          seen.add(r.part_number);
+          return true;
+        });
 
       await upsertParts(upsertRows);
       await load();
@@ -70,6 +78,20 @@ export default function Parts() {
       toast('업로드 실패', e.message, 'error');
     } finally {
       setUploading(false);
+    }
+  };
+
+  const handleDeleteAll = async () => {
+    setDelAllBusy(true);
+    try {
+      await deleteAllParts();
+      setParts([]);
+      setDelAllOpen(false);
+      toast('전체 삭제 완료', '품번/품명 데이터가 모두 삭제되었습니다', 'success');
+    } catch (e) {
+      toast('삭제 실패', e.message, 'error');
+    } finally {
+      setDelAllBusy(false);
     }
   };
 
@@ -103,16 +125,25 @@ export default function Parts() {
           <div className="page-title">품번 관리</div>
           <div className="page-sub">전체 {parts.length}개 품목 등록됨</div>
         </div>
-        <div style={{ display: 'flex', gap: 8 }}>
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
           <button className="btn btn-ghost" onClick={load}>🔄 새로고침</button>
-          <button
-            className="btn btn-primary"
-            onClick={() => fileRef.current?.click()}
-            disabled={uploading || !isAdmin}
-            title={!isAdmin ? '관리자만 업로드 가능' : ''}
-          >
-            {uploading ? '⏳ 업로드 중...' : '📂 엑셀 업로드'}
-          </button>
+          {isAdmin && (
+            <button
+              className="btn btn-primary"
+              onClick={() => fileRef.current?.click()}
+              disabled={uploading}
+            >
+              {uploading ? '⏳ 업로드 중...' : '📂 엑셀 업로드'}
+            </button>
+          )}
+          {isAdmin && parts.length > 0 && (
+            <button
+              className="btn btn-danger"
+              onClick={() => setDelAllOpen(true)}
+            >
+              🗑 전체 삭제
+            </button>
+          )}
           <input
             ref={fileRef}
             type="file"
@@ -143,6 +174,59 @@ export default function Parts() {
         </span>
       </div>
 
+      {/* 전체 삭제 확인 모달 */}
+      {delAllOpen && (
+        <div style={{
+          position: 'fixed', inset: 0, background: 'rgba(0,0,0,.45)',
+          zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center',
+        }}>
+          <div style={{
+            background: '#fff', borderRadius: 16, padding: 0,
+            width: 420, maxWidth: '90vw',
+            boxShadow: '0 24px 64px rgba(0,0,0,.2)', overflow: 'hidden',
+          }}>
+            {/* 헤더 */}
+            <div style={{
+              background: '#fef2f2', borderBottom: '1px solid #fecaca',
+              padding: '20px 24px',
+            }}>
+              <div style={{ fontSize: 16, fontWeight: 700, color: '#991b1b' }}>
+                ⚠️ 품번/품명 전체 삭제
+              </div>
+            </div>
+            {/* 본문 */}
+            <div style={{ padding: '24px' }}>
+              <p style={{ fontSize: 14, color: '#374151', lineHeight: 1.7, marginBottom: 16 }}>
+                현재 등록된 <strong style={{ color: '#dc2626' }}>{parts.length}개</strong> 품목이
+                모두 삭제됩니다.
+              </p>
+              <p style={{ fontSize: 13, color: '#6b7280' }}>
+                이 작업은 되돌릴 수 없습니다. 삭제 후 다시 엑셀을 업로드해야 합니다.
+              </p>
+            </div>
+            {/* 푸터 */}
+            <div style={{
+              padding: '16px 24px', borderTop: '1px solid #f1f5f9',
+              display: 'flex', justifyContent: 'flex-end', gap: 8,
+            }}>
+              <button
+                className="btn btn-ghost"
+                onClick={() => setDelAllOpen(false)}
+                disabled={delAllBusy}
+              >취소</button>
+              <button
+                className="btn btn-danger"
+                onClick={handleDeleteAll}
+                disabled={delAllBusy}
+                style={{ background: '#dc2626', color: '#fff' }}
+              >
+                {delAllBusy ? '⏳ 삭제 중...' : `🗑 ${parts.length}개 전체 삭제`}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       <div className="card">
         {loading ? (
           <div className="loading">⏳ 불러오는 중...</div>
@@ -159,7 +243,7 @@ export default function Parts() {
                   <th>#</th>
                   <th>품번</th>
                   <th>품명</th>
-                  <th></th>
+                  {isAdmin && <th></th>}
                 </tr>
               </thead>
               <tbody>

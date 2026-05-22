@@ -181,7 +181,7 @@ function ExpandPanel({ item, type, causesByClaimId, navigate, setExpandedKey }) 
 
 export default function Analytics() {
   const { claims, stages, loading } = useClaims();
-  const { department } = useAuth();
+  const { department, isAdmin } = useAuth();
   const navigate = useNavigate();
   const isQualityTeam = department === '품질기술팀' || isAdmin;
 
