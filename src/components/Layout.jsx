@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Outlet, NavLink, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { signOut } from '../lib/supabase';
+import { signOut, canViewSupplierClaims } from '../lib/supabase';
 import { useToast } from '../context/ToastContext';
 import { usePresence } from '../hooks/usePresence';
 import { usePrintTitle } from '../context/PrintContext';
@@ -16,7 +16,8 @@ const DEPT_COLORS = {
 const printDate = new Date().toLocaleDateString('ko-KR', { year: 'numeric', month: 'long', day: 'numeric' });
 
 export default function Layout() {
-  const { user, displayName, department, isAdmin, saveName } = useAuth();
+  const { user, displayName, department, isAdmin, saveName, profile } = useAuth();
+  const showSupplier = canViewSupplierClaims(department, isAdmin);
   const { printTitle } = usePrintTitle();
   const toast = useToast();
   const navigate = useNavigate();
@@ -56,7 +57,7 @@ export default function Layout() {
           className="btn btn-sm"
           onClick={() => { navigate('/claims/new'); closeMenu(); }}
           style={{ marginLeft: 'auto', background: '#2563eb', color: '#fff', border: 'none', fontSize: 12, padding: '5px 10px' }}
-        >➕ 접수</button>
+        >➕ 고객사</button>
       </div>
 
       {mobileOpen && <div className="mobile-overlay" onClick={closeMenu} />}
@@ -67,7 +68,7 @@ export default function Layout() {
         {/* 로고 */}
         <div className="sidebar-logo">
           <h1>🚨 클레임 관리</h1>
-          <p>고객사 클레임 트래커</p>
+          <p>{showSupplier ? '클레임 통합 관리' : '고객사 클레임 트래커'}</p>
         </div>
 
         {/* 내비게이션 */}
@@ -75,6 +76,11 @@ export default function Layout() {
           <NavLink to="/" end className={({ isActive }) => `nav-item${isActive ? ' active' : ''}`}>
             <span>🏠</span> 대시보드
           </NavLink>
+
+          {/* 고객사 클레임 섹션 */}
+          <div style={{ fontSize: 10, color: '#94a3b8', fontWeight: 700, letterSpacing: .8, padding: '10px 14px 4px', textTransform: 'uppercase' }}>
+            고객사 클레임
+          </div>
           <NavLink to="/claims" className={({ isActive }) => `nav-item${isActive ? ' active' : ''}`}>
             <span>📋</span> 클레임 목록
           </NavLink>
@@ -84,6 +90,26 @@ export default function Layout() {
           <NavLink to="/analytics" className={({ isActive }) => `nav-item${isActive ? ' active' : ''}`}>
             <span>📊</span> 누적 분석
           </NavLink>
+
+          {/* 공급사 불량 섹션 (품질기술팀 + 관리자만) */}
+          {showSupplier && (
+            <>
+              <div style={{ fontSize: 10, color: '#94a3b8', fontWeight: 700, letterSpacing: .8, padding: '10px 14px 4px', textTransform: 'uppercase' }}>
+                공급사 불량
+              </div>
+              <NavLink to="/supplier-claims" className={({ isActive }) => `nav-item${isActive ? ' active' : ''}`}>
+                <span>🏭</span> 불량 이력
+              </NavLink>
+              <NavLink to="/supplier-claims/new" className={({ isActive }) => `nav-item${isActive ? ' active' : ''}`}>
+                <span>➕</span> 불량 접수
+              </NavLink>
+            </>
+          )}
+
+          {/* 공통 */}
+          <div style={{ fontSize: 10, color: '#94a3b8', fontWeight: 700, letterSpacing: .8, padding: '10px 14px 4px', textTransform: 'uppercase' }}>
+            기타
+          </div>
           <NavLink to="/parts" className={({ isActive }) => `nav-item${isActive ? ' active' : ''}`}>
             <span>🔩</span> 품번 관리
           </NavLink>

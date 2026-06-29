@@ -84,14 +84,56 @@ CREATE TABLE IF NOT EXISTS parts (
 -- ※ 기존 parts 테이블에 컬럼 추가
 -- ALTER TABLE parts ADD COLUMN IF NOT EXISTS spec TEXT;
 
+-- 5. 공급사 불량 테이블
+CREATE TABLE IF NOT EXISTS supplier_claims (
+  id                 TEXT PRIMARY KEY,
+  supplier_name      TEXT NOT NULL,
+  part_number        TEXT,
+  part_name          TEXT,
+  product_type       TEXT,
+  product_category   TEXT,
+  quantity           INTEGER,
+  defect_quantity    INTEGER,
+  lot_number         TEXT,
+  defect_type        TEXT,              -- 치수불량 / 외관불량 / 기능불량 / 포장불량 / 수량부족 / 기타
+  defect_description TEXT,
+  occurrence_date    DATE,
+  receipt_date       DATE,
+  return_status      TEXT DEFAULT '미결'
+                          CHECK (return_status IN ('반품','교환','폐기','미결')),
+  handler_dept       TEXT,
+  handler_name       TEXT,
+  handler_contact    TEXT,
+  current_stage      TEXT DEFAULT '원인분석'
+                          CHECK (current_stage IN ('접수','원인분석','공급사 통보','조치','종결')),
+  created_at         TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- 6. 공급사 불량 처리 단계 이력
+CREATE TABLE IF NOT EXISTS supplier_claim_stages (
+  id          TEXT PRIMARY KEY,
+  claim_id    TEXT REFERENCES supplier_claims(id) ON DELETE CASCADE,
+  stage_name  TEXT NOT NULL,
+  stage_date  DATE,
+  description TEXT,
+  handler     TEXT,
+  handler_dept TEXT,
+  user_id     TEXT,
+  user_email  TEXT,
+  user_name   TEXT,
+  created_at  TIMESTAMPTZ DEFAULT NOW()
+);
+
 -- ============================================================
 -- RLS (Row Level Security) 설정
 -- ============================================================
 
-ALTER TABLE profiles    ENABLE ROW LEVEL SECURITY;
-ALTER TABLE claims      ENABLE ROW LEVEL SECURITY;
-ALTER TABLE claim_stages ENABLE ROW LEVEL SECURITY;
-ALTER TABLE parts       ENABLE ROW LEVEL SECURITY;
+ALTER TABLE profiles             ENABLE ROW LEVEL SECURITY;
+ALTER TABLE claims               ENABLE ROW LEVEL SECURITY;
+ALTER TABLE claim_stages         ENABLE ROW LEVEL SECURITY;
+ALTER TABLE parts                ENABLE ROW LEVEL SECURITY;
+ALTER TABLE supplier_claims      ENABLE ROW LEVEL SECURITY;
+ALTER TABLE supplier_claim_stages ENABLE ROW LEVEL SECURITY;
 
 -- profiles: 본인만 읽기/쓰기
 CREATE POLICY "profiles_select" ON profiles FOR SELECT USING (auth.uid()::text = id);
@@ -135,3 +177,15 @@ CREATE POLICY "dr_insert" ON delete_requests FOR INSERT WITH CHECK (auth.role() 
 CREATE POLICY "dr_select" ON delete_requests FOR SELECT USING (auth.role() = 'authenticated');
 -- 로그인 사용자는 상태 업데이트 가능 (관리자가 처리)
 CREATE POLICY "dr_update" ON delete_requests FOR UPDATE USING (auth.role() = 'authenticated');
+
+-- supplier_claims: 읽기 전체 공개 / 쓰기는 인증 필요
+CREATE POLICY "sc_select" ON supplier_claims FOR SELECT USING (true);
+CREATE POLICY "sc_insert" ON supplier_claims FOR INSERT WITH CHECK (auth.role() = 'authenticated');
+CREATE POLICY "sc_update" ON supplier_claims FOR UPDATE USING (auth.role() = 'authenticated');
+CREATE POLICY "sc_delete" ON supplier_claims FOR DELETE USING (auth.role() = 'authenticated');
+
+-- supplier_claim_stages: 읽기 전체 공개 / 쓰기는 인증 필요
+CREATE POLICY "scs_select" ON supplier_claim_stages FOR SELECT USING (true);
+CREATE POLICY "scs_insert" ON supplier_claim_stages FOR INSERT WITH CHECK (auth.role() = 'authenticated');
+CREATE POLICY "scs_update" ON supplier_claim_stages FOR UPDATE USING (auth.role() = 'authenticated');
+CREATE POLICY "scs_delete" ON supplier_claim_stages FOR DELETE USING (auth.role() = 'authenticated');

@@ -16,10 +16,25 @@ export const STAGE_COLORS = {
   '종결':           { bg: '#d1fae5', text: '#065f46', dot: '#10b981' },
 };
 
+export const SUPPLIER_STAGES = ['접수', '원인분석', '공급사 통보', '조치', '종결'];
+export const SUPPLIER_STAGE_ICONS = ['📥', '🔍', '📢', '🛠️', '✅'];
+export const SUPPLIER_STAGE_COLORS = {
+  '접수':       { bg: '#dbeafe', text: '#1e40af', dot: '#3b82f6' },
+  '원인분석':   { bg: '#ede9fe', text: '#5b21b6', dot: '#8b5cf6' },
+  '공급사 통보': { bg: '#fef3c7', text: '#92400e', dot: '#f59e0b' },
+  '조치':       { bg: '#ffedd5', text: '#9a3412', dot: '#f97316' },
+  '종결':       { bg: '#d1fae5', text: '#065f46', dot: '#10b981' },
+};
+
 export const CUSTOMER_GROUPS     = ['KT', 'LG', 'SK', '해외고객사', '온라인몰', '기타'];
 export const PRODUCT_TYPES       = ['수입품', '자체제작상품', '내수품'];
 export const PRODUCT_CATEGORIES  = ['광분배함류', '광접속함체류', '광커넥터류', '광점퍼코드류', '동자재', '기타'];
 export const DEPARTMENTS         = ['영업팀', '마케팅팀', '품질기술팀', '영업관리팀'];
+export const DEFECT_TYPES        = ['치수불량', '외관불량', '기능불량', '포장불량', '수량부족', '기타'];
+export const RETURN_STATUSES     = ['미결', '반품', '교환', '폐기'];
+
+export const canViewSupplierClaims = (department, isAdmin) =>
+  isAdmin || department === '품질기술팀';
 
 export const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
 
@@ -261,5 +276,125 @@ export async function deletePart(id) {
 
 export async function deleteAllParts() {
   const { error } = await sb.from('parts').delete().neq('id', '');
+  if (error) throw error;
+}
+
+// ── Supplier Claims CRUD ──────────────────────────────────────
+export async function fetchSupplierClaims() {
+  const { data, error } = await sb
+    .from('supplier_claims')
+    .select('*')
+    .order('receipt_date', { ascending: false });
+  if (error) throw error;
+  return data || [];
+}
+
+export async function fetchAllSupplierStages() {
+  const { data, error } = await sb
+    .from('supplier_claim_stages')
+    .select('*')
+    .order('created_at');
+  if (error) throw error;
+  return data || [];
+}
+
+export async function insertSupplierClaim(data, user) {
+  const claim = {
+    ...data,
+    id: uid(),
+    current_stage: '원인분석',
+    created_at: new Date().toISOString(),
+  };
+  const { error } = await sb.from('supplier_claims').insert(claim);
+  if (error) throw error;
+
+  const firstEntry = {
+    id: uid(),
+    claim_id: claim.id,
+    stage_name: '접수',
+    stage_date: data.receipt_date || new Date().toISOString().slice(0, 10),
+    description: '공급사 불량 최초 접수',
+    handler:      data.handler_name || '',
+    handler_dept: data.handler_dept || '',
+    user_id:    user?.id    || null,
+    user_email: user?.email || null,
+    user_name:  user?.user_metadata?.name || null,
+    created_at: new Date().toISOString(),
+  };
+  await sb.from('supplier_claim_stages').insert(firstEntry);
+
+  return { claim, firstEntry };
+}
+
+export async function advanceSupplierClaim(claimId, currentStage, { stage_date, description, handler, handler_dept }, user) {
+  const idx = SUPPLIER_STAGES.indexOf(currentStage);
+  if (idx < 0 || idx >= SUPPLIER_STAGES.length - 1) throw new Error('이미 최종 단계입니다.');
+  const nextStage = SUPPLIER_STAGES[idx + 1];
+
+  const { data: existing } = await sb
+    .from('supplier_claim_stages')
+    .select('id')
+    .eq('claim_id', claimId)
+    .eq('stage_name', currentStage)
+    .limit(1);
+  if (existing && existing.length > 0) throw new Error(`"${currentStage}" 단계는 이미 등록된 건입니다.`);
+
+  const { error: ue } = await sb
+    .from('supplier_claims')
+    .update({ current_stage: nextStage })
+    .eq('id', claimId);
+  if (ue) throw ue;
+
+  const entry = {
+    id: uid(),
+    claim_id:     claimId,
+    stage_name:   currentStage,
+    stage_date:   stage_date || new Date().toISOString().slice(0, 10),
+    description:  description || '',
+    handler:      handler || '',
+    handler_dept: handler_dept || '',
+    user_id:    user?.id    || null,
+    user_email: user?.email || null,
+    user_name:  user?.user_metadata?.name || null,
+    created_at: new Date().toISOString(),
+  };
+  const { error: ie } = await sb.from('supplier_claim_stages').insert(entry);
+  if (ie) throw ie;
+
+  if (nextStage === '종결') {
+    const closeEntry = {
+      id: uid(),
+      claim_id:    claimId,
+      stage_name:  '종결',
+      stage_date:  stage_date || new Date().toISOString().slice(0, 10),
+      description: '공급사 불량 종결 처리',
+      handler:      handler || '',
+      handler_dept: handler_dept || '',
+      user_id:    user?.id    || null,
+      user_email: user?.email || null,
+      user_name:  user?.user_metadata?.name || null,
+      created_at: new Date().toISOString(),
+    };
+    await sb.from('supplier_claim_stages').insert(closeEntry);
+  }
+
+  return { nextStage, entry };
+}
+
+export async function updateSupplierClaim(id, data) {
+  const { error } = await sb.from('supplier_claims').update(data).eq('id', id);
+  if (error) throw error;
+}
+
+export async function deleteSupplierClaim(id) {
+  const { error } = await sb.from('supplier_claims').delete().eq('id', id);
+  if (error) throw error;
+}
+
+export async function updateSupplierStageEntry(id, { stage_date, description, handler, handler_dept }) {
+  const { error } = await sb
+    .from('supplier_claim_stages')
+    .update({ stage_date: stage_date || null, description: description || '', handler: handler || '', handler_dept: handler_dept || '' })
+    .eq('id', id);
   if (error) throw error;
 }

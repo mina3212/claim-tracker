@@ -2,7 +2,9 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { ToastProvider }  from './context/ToastContext';
 import { ClaimsProvider } from './context/ClaimsContext';
+import { SupplierClaimsProvider } from './context/SupplierClaimsContext';
 import { PrintProvider }  from './context/PrintContext';
+import { canViewSupplierClaims } from './lib/supabase';
 import Layout      from './components/Layout';
 import LoginGate   from './components/LoginGate';
 import Dashboard   from './pages/Dashboard';
@@ -13,6 +15,17 @@ import UserManual  from './pages/UserManual';
 import NewClaim    from './pages/NewClaim';
 import Analytics   from './pages/Analytics';
 import Parts       from './pages/Parts';
+import SupplierClaimList   from './pages/SupplierClaimList';
+import SupplierClaimDetail from './pages/SupplierClaimDetail';
+import NewSupplierClaim    from './pages/NewSupplierClaim';
+
+function SupplierGuard({ children }) {
+  const { profile } = useAuth();
+  if (!canViewSupplierClaims(profile?.department, profile?.is_admin)) {
+    return <Navigate to="/" replace />;
+  }
+  return children;
+}
 
 function AppRoutes() {
   const { user, loading } = useAuth();
@@ -36,23 +49,28 @@ function AppRoutes() {
 
   return (
     <ClaimsProvider>
-      <BrowserRouter>
-        <PrintProvider>
-        <Routes>
-          <Route path="/" element={<Layout />}>
-            <Route index element={<Dashboard />} />
-            <Route path="claims" element={<ClaimList />} />
-            <Route path="claims/new" element={<NewClaim />} />
-            <Route path="claims/:id" element={<ClaimDetail />} />
-            <Route path="claims/:id/report" element={<ClaimReport />} />
-            <Route path="manual" element={<UserManual />} />
-            <Route path="analytics" element={<Analytics />} />
-            <Route path="parts" element={<Parts />} />
-            <Route path="*" element={<Navigate to="/" replace />} />
-          </Route>
-        </Routes>
-        </PrintProvider>
-      </BrowserRouter>
+      <SupplierClaimsProvider>
+        <BrowserRouter>
+          <PrintProvider>
+          <Routes>
+            <Route path="/" element={<Layout />}>
+              <Route index element={<Dashboard />} />
+              <Route path="claims" element={<ClaimList />} />
+              <Route path="claims/new" element={<NewClaim />} />
+              <Route path="claims/:id" element={<ClaimDetail />} />
+              <Route path="claims/:id/report" element={<ClaimReport />} />
+              <Route path="manual" element={<UserManual />} />
+              <Route path="analytics" element={<Analytics />} />
+              <Route path="parts" element={<Parts />} />
+              <Route path="supplier-claims" element={<SupplierGuard><SupplierClaimList /></SupplierGuard>} />
+              <Route path="supplier-claims/new" element={<SupplierGuard><NewSupplierClaim /></SupplierGuard>} />
+              <Route path="supplier-claims/:id" element={<SupplierGuard><SupplierClaimDetail /></SupplierGuard>} />
+              <Route path="*" element={<Navigate to="/" replace />} />
+            </Route>
+          </Routes>
+          </PrintProvider>
+        </BrowserRouter>
+      </SupplierClaimsProvider>
     </ClaimsProvider>
   );
 }
