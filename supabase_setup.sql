@@ -226,3 +226,8 @@ CREATE POLICY "sil_select" ON supplier_improvement_logs FOR SELECT USING (true);
 CREATE POLICY "sil_insert" ON supplier_improvement_logs FOR INSERT WITH CHECK (auth.role() = 'authenticated');
 CREATE POLICY "sil_update" ON supplier_improvement_logs FOR UPDATE USING (auth.role() = 'authenticated');
 CREATE POLICY "sil_delete" ON supplier_improvement_logs FOR DELETE USING (auth.role() = 'authenticated');
+
+-- Phase 3: 처리결과/구매경로 컬럼 추가 (단일 폼 방식 개편)
+ALTER TABLE supplier_claims ADD COLUMN IF NOT EXISTS disposition  TEXT;
+ALTER TABLE supplier_claims ADD COLUMN IF NOT EXISTS purchase_dept TEXT;
+ALTER TABLE supplier_claims ADD COLUMN IF NOT EXISTS notes        TEXT;

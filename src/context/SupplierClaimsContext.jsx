@@ -39,7 +39,7 @@ export function SupplierClaimsProvider({ children }) {
 
   const addClaim = useCallback((claim, firstEntry) => {
     setClaims(prev => [claim, ...prev]);
-    setStages(prev => [...prev, firstEntry]);
+    if (firstEntry) setStages(prev => [...prev, firstEntry]);
   }, []);
 
   const updateClaimStage = useCallback((claimId, nextStage, entry) => {
