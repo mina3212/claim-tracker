@@ -103,6 +103,9 @@ export default function Layout() {
               <NavLink to="/supplier-claims/new" className={({ isActive }) => `nav-item${isActive ? ' active' : ''}`}>
                 <span>➕</span> 불량 접수
               </NavLink>
+              <NavLink to="/analysis" className={({ isActive }) => `nav-item${isActive ? ' active' : ''}`}>
+                <span>🤖</span> AI 분석 보고서
+              </NavLink>
             </>
           )}
 
