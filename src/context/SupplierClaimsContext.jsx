@@ -1,20 +1,26 @@
 import { createContext, useContext, useState, useEffect, useCallback } from 'react';
-import { fetchSupplierClaims, fetchAllSupplierStages } from '../lib/supabase';
+import { fetchSupplierClaims, fetchAllSupplierStages, fetchImprovementLogs } from '../lib/supabase';
 
 const SupplierClaimsCtx = createContext(null);
 
 export function SupplierClaimsProvider({ children }) {
-  const [claims,  setClaims]  = useState([]);
-  const [stages,  setStages]  = useState([]);
+  const [claims,           setClaims]           = useState([]);
+  const [stages,           setStages]           = useState([]);
+  const [improvementLogs,  setImprovementLogs]  = useState([]);
   const [loading, setLoading] = useState(true);
   const [dbReady, setDbReady] = useState(true);
 
   const refresh = useCallback(async () => {
     setLoading(true);
     try {
-      const [c, s] = await Promise.all([fetchSupplierClaims(), fetchAllSupplierStages()]);
+      const [c, s, imp] = await Promise.all([
+        fetchSupplierClaims(),
+        fetchAllSupplierStages(),
+        fetchImprovementLogs().catch(() => []),
+      ]);
       setClaims(c);
       setStages(s);
+      setImprovementLogs(imp || []);
       setDbReady(true);
     } catch (e) {
       if (e.code === '42P01') setDbReady(false);
@@ -54,11 +60,24 @@ export function SupplierClaimsProvider({ children }) {
     setStages(prev => prev.map(s => s.id === id ? { ...s, ...data } : s));
   }, []);
 
+  const addImprovementLog = useCallback((log) => {
+    setImprovementLogs(prev => [...prev, log]);
+  }, []);
+
+  const updateImpLog = useCallback((id, data) => {
+    setImprovementLogs(prev => prev.map(l => l.id === id ? { ...l, ...data } : l));
+  }, []);
+
+  const removeImpLog = useCallback((id) => {
+    setImprovementLogs(prev => prev.filter(l => l.id !== id));
+  }, []);
+
   return (
     <SupplierClaimsCtx.Provider value={{
-      claims, stages, loading, dbReady,
+      claims, stages, improvementLogs, loading, dbReady,
       refresh, getStagesFor, addClaim, updateClaimStage, updateClaimData,
       removeClaim, patchStageEntry,
+      addImprovementLog, updateImpLog, removeImpLog,
     }}>
       {children}
     </SupplierClaimsCtx.Provider>

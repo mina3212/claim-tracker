@@ -32,6 +32,8 @@ export const PRODUCT_CATEGORIES  = ['광분배함류', '광접속함체류', '�
 export const DEPARTMENTS         = ['영업팀', '마케팅팀', '품질기술팀', '영업관리팀'];
 export const DEFECT_TYPES        = ['치수불량', '외관불량', '기능불량', '포장불량', '수량부족', '기타'];
 export const RETURN_STATUSES     = ['미결', '반품', '교환', '폐기'];
+export const INSPECTION_STAGES   = ['부품 수입검사', '완제품 입고검사', '출하검사'];
+export const IMPROVEMENT_RESULTS = ['확인중', '개선', '미개선'];
 
 export const canViewSupplierClaims = (department, isAdmin) =>
   isAdmin || department === '품질기술팀';
@@ -279,6 +281,18 @@ export async function deleteAllParts() {
   if (error) throw error;
 }
 
+// ── Supplier name autocomplete ────────────────────────────────
+export async function searchSupplierNames(query) {
+  if (!query || !query.trim()) return [];
+  const { data } = await sb
+    .from('supplier_claims')
+    .select('supplier_name')
+    .ilike('supplier_name', `%${query.trim()}%`)
+    .order('supplier_name')
+    .limit(15);
+  return [...new Set((data || []).map(r => r.supplier_name).filter(Boolean))];
+}
+
 // ── Supplier Claims CRUD ──────────────────────────────────────
 export async function fetchSupplierClaims() {
   const { data, error } = await sb
@@ -396,5 +410,45 @@ export async function updateSupplierStageEntry(id, { stage_date, description, ha
     .from('supplier_claim_stages')
     .update({ stage_date: stage_date || null, description: description || '', handler: handler || '', handler_dept: handler_dept || '' })
     .eq('id', id);
+  if (error) throw error;
+}
+
+// ── Supplier Improvement Logs ─────────────────────────────────
+export async function fetchImprovementLogs(supplierClaimId) {
+  let query = sb.from('supplier_improvement_logs').select('*').order('created_at');
+  if (supplierClaimId) query = query.eq('supplier_claim_id', supplierClaimId);
+  const { data, error } = await query;
+  if (error) throw error;
+  return data || [];
+}
+
+export async function insertImprovementLog(supplierClaimId, data, user) {
+  const log = {
+    id: uid(),
+    supplier_claim_id: supplierClaimId,
+    incoming_lot_no:  data.incoming_lot_no  || '',
+    incoming_date:    data.incoming_date    || null,
+    quantity:         data.quantity != null ? parseInt(data.quantity) : null,
+    defect_quantity:  data.defect_quantity != null ? parseInt(data.defect_quantity) : null,
+    is_improved:      data.is_improved      || '확인중',
+    notes:            data.notes            || '',
+    handler:          data.handler          || '',
+    handler_dept:     data.handler_dept     || '',
+    user_id:    user?.id    || null,
+    user_email: user?.email || null,
+    created_at: new Date().toISOString(),
+  };
+  const { error } = await sb.from('supplier_improvement_logs').insert(log);
+  if (error) throw error;
+  return log;
+}
+
+export async function updateImprovementLog(id, data) {
+  const { error } = await sb.from('supplier_improvement_logs').update(data).eq('id', id);
+  if (error) throw error;
+}
+
+export async function deleteImprovementLog(id) {
+  const { error } = await sb.from('supplier_improvement_logs').delete().eq('id', id);
   if (error) throw error;
 }

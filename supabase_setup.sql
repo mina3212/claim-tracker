@@ -189,3 +189,40 @@ CREATE POLICY "scs_select" ON supplier_claim_stages FOR SELECT USING (true);
 CREATE POLICY "scs_insert" ON supplier_claim_stages FOR INSERT WITH CHECK (auth.role() = 'authenticated');
 CREATE POLICY "scs_update" ON supplier_claim_stages FOR UPDATE USING (auth.role() = 'authenticated');
 CREATE POLICY "scs_delete" ON supplier_claim_stages FOR DELETE USING (auth.role() = 'authenticated');
+
+-- ============================================================
+-- Phase 2: 공급사 불량 신규 필드 추가 (2024 업데이트)
+-- 이미 테이블이 있을 경우 아래 ALTER TABLE 실행하세요
+-- ============================================================
+
+-- 7. supplier_claims 신규 컬럼
+ALTER TABLE supplier_claims ADD COLUMN IF NOT EXISTS incoming_date    DATE;
+ALTER TABLE supplier_claims ADD COLUMN IF NOT EXISTS incoming_lot_no  TEXT;
+ALTER TABLE supplier_claims ADD COLUMN IF NOT EXISTS inspection_stage TEXT;
+ALTER TABLE supplier_claims ADD COLUMN IF NOT EXISTS cavity_total     INTEGER;
+ALTER TABLE supplier_claims ADD COLUMN IF NOT EXISTS cavity_defective INTEGER;
+
+-- 8. 개선 추적 이력 테이블
+CREATE TABLE IF NOT EXISTS supplier_improvement_logs (
+  id                TEXT PRIMARY KEY,
+  supplier_claim_id TEXT REFERENCES supplier_claims(id) ON DELETE CASCADE,
+  incoming_lot_no   TEXT NOT NULL,           -- 추적 차수 (예: 2차, 2024-4차)
+  incoming_date     DATE,
+  quantity          INTEGER,
+  defect_quantity   INTEGER,
+  is_improved       TEXT DEFAULT '확인중'
+                         CHECK (is_improved IN ('확인중','개선','미개선')),
+  notes             TEXT,
+  handler           TEXT,
+  handler_dept      TEXT,
+  user_id           TEXT,
+  user_email        TEXT,
+  created_at        TIMESTAMPTZ DEFAULT NOW()
+);
+
+ALTER TABLE supplier_improvement_logs ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "sil_select" ON supplier_improvement_logs FOR SELECT USING (true);
+CREATE POLICY "sil_insert" ON supplier_improvement_logs FOR INSERT WITH CHECK (auth.role() = 'authenticated');
+CREATE POLICY "sil_update" ON supplier_improvement_logs FOR UPDATE USING (auth.role() = 'authenticated');
+CREATE POLICY "sil_delete" ON supplier_improvement_logs FOR DELETE USING (auth.role() = 'authenticated');
