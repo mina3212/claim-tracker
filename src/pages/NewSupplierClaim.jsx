@@ -10,30 +10,30 @@ import {
   DISPOSITION_TYPES, DISPOSITION_COLORS, PURCHASE_DEPTS,
 } from '../lib/supabase';
 import PartSearchModal from '../components/PartSearchModal';
-import SupplierSearch from '../components/SupplierSearch';
+import SupplierSearchModal from '../components/SupplierSearchModal';
 
 const today = () => new Date().toISOString().slice(0, 10);
 
 const INITIAL = {
-  supplier_name:      '',
-  purchase_dept:      '',           // 구매/SCM팀 | 마케팅팀(수입)
-  incoming_date:      today(),
-  incoming_lot_no:    '',           // 입고 차수 (e.g. 1차, 2024-3차)
-  lot_number:         '',           // 입고 LOT
-  part_number:        '',
-  part_name:          '',
-  quantity:           '',
-  product_type:       '',
-  product_category:   '',
-  inspection_stage:   '',
-  cavity_total:       '',
-  cavity_defective:   '',
-  defect_quantity:    '',
-  defect_type:        '',
-  defect_description: '',
-  disposition:        '',           // 사용승인 / 반품(대체품) / 폐기 / 재작업 / 선별작업
-  notes:              '',
-  handler_name:       '',
+  supplier_name:       '',
+  purchase_dept:       '',
+  incoming_date:       today(),
+  incoming_lot_no:     '',
+  part_number:         '',
+  part_name:           '',
+  quantity:            '',
+  inspection_quantity: '',
+  product_type:        '',
+  product_category:    '',
+  inspection_stage:    '',
+  cavity_total:        '',
+  cavity_defective:    '',
+  defect_quantity:     '',
+  defect_type:         '',
+  defect_description:  '',
+  disposition:         '',
+  notes:               '',
+  handler_name:        '',
 };
 
 export default function NewSupplierClaim() {
@@ -41,9 +41,10 @@ export default function NewSupplierClaim() {
   const { addClaim } = useSupplierClaims();
   const toast        = useToast();
   const navigate     = useNavigate();
-  const [form, setForm]                     = useState(INITIAL);
-  const [submitting, setSub]                = useState(false);
-  const [partSearchOpen, setPartSearchOpen] = useState(false);
+  const [form, setForm]                         = useState(INITIAL);
+  const [submitting, setSub]                    = useState(false);
+  const [partSearchOpen, setPartSearchOpen]     = useState(false);
+  const [supplierSearchOpen, setSupplierSearch] = useState(false);
 
   if (!user) return (
     <div>
@@ -56,8 +57,9 @@ export default function NewSupplierClaim() {
   const setVal = (key, val) => setForm(prev => ({ ...prev, [key]: val }));
 
   const qty     = parseFloat(form.quantity);
+  const insQty  = parseFloat(form.inspection_quantity);
   const defQty  = parseFloat(form.defect_quantity);
-  const defRate = qty > 0 && defQty >= 0 ? ((defQty / qty) * 100).toFixed(1) : null;
+  const defRate = insQty > 0 && defQty >= 0 ? ((defQty / insQty) * 100).toFixed(1) : null;
   const isPartInspection = form.inspection_stage === '부품 수입검사';
 
   const handleSubmit = async (e) => {
@@ -83,26 +85,26 @@ export default function NewSupplierClaim() {
     setSub(true);
     try {
       const payload = {
-        supplier_name:      form.supplier_name.trim(),
-        purchase_dept:      form.purchase_dept      || null,
-        incoming_date:      form.incoming_date      || null,
-        incoming_lot_no:    form.incoming_lot_no.trim() || null,
-        lot_number:         form.lot_number.trim()       || null,
-        part_number:        form.part_number.trim(),
-        part_name:          form.part_name.trim(),
-        quantity:           parseInt(form.quantity),
-        product_type:       form.product_type       || null,
-        product_category:   form.product_category   || null,
-        inspection_stage:   form.inspection_stage   || null,
-        cavity_total:       form.cavity_total       !== '' ? parseInt(form.cavity_total)       : null,
-        cavity_defective:   form.cavity_defective   !== '' ? parseInt(form.cavity_defective)   : null,
-        defect_quantity:    parseInt(form.defect_quantity),
-        defect_type:        form.defect_type        || null,
-        defect_description: form.defect_description.trim(),
-        disposition:        form.disposition        || null,
-        notes:              form.notes.trim()        || null,
-        handler_name:       form.handler_name.trim() || null,
-        handler_dept:       '품질기술팀',
+        supplier_name:       form.supplier_name.trim(),
+        purchase_dept:       form.purchase_dept      || null,
+        incoming_date:       form.incoming_date      || null,
+        incoming_lot_no:     form.incoming_lot_no.trim() || null,
+        part_number:         form.part_number.trim(),
+        part_name:           form.part_name.trim(),
+        quantity:            parseInt(form.quantity),
+        inspection_quantity: form.inspection_quantity !== '' ? parseInt(form.inspection_quantity) : null,
+        product_type:        form.product_type       || null,
+        product_category:    form.product_category   || null,
+        inspection_stage:    form.inspection_stage   || null,
+        cavity_total:        form.cavity_total       !== '' ? parseInt(form.cavity_total)       : null,
+        cavity_defective:    form.cavity_defective   !== '' ? parseInt(form.cavity_defective)   : null,
+        defect_quantity:     parseInt(form.defect_quantity),
+        defect_type:         form.defect_type        || null,
+        defect_description:  form.defect_description.trim(),
+        disposition:         form.disposition        || null,
+        notes:               form.notes.trim()        || null,
+        handler_name:        form.handler_name.trim() || null,
+        handler_dept:        '품질기술팀',
       };
       const { claim } = await insertSupplierClaim(payload, user);
       addClaim(claim);
@@ -135,7 +137,10 @@ export default function NewSupplierClaim() {
 
             <div className="form-group form-span-2">
               <label>공급사명 <span className="required-star">*</span></label>
-              <SupplierSearch value={form.supplier_name} onChange={v => setVal('supplier_name', v)} />
+              <div style={{ display: 'flex', gap: 6 }}>
+                <input value={form.supplier_name} onChange={set('supplier_name')} placeholder="공급사명 입력" style={{ flex: 1 }} />
+                <button type="button" className="btn btn-ghost btn-icon" onClick={() => setSupplierSearch(true)}>🔍</button>
+              </div>
             </div>
 
             <div className="form-group form-span-2">
@@ -163,10 +168,7 @@ export default function NewSupplierClaim() {
               <label>입고 차수</label>
               <input placeholder="예: 1차, 2024-3차" value={form.incoming_lot_no} onChange={set('incoming_lot_no')} />
             </div>
-            <div className="form-group">
-              <label>입고 LOT</label>
-              <input placeholder="LOT 번호" value={form.lot_number} onChange={set('lot_number')} />
-            </div>
+            <div className="form-group" />
             <div className="form-group">
               <label>담당자</label>
               <input placeholder="검사 담당자 이름" value={form.handler_name} onChange={set('handler_name')} />
@@ -267,16 +269,20 @@ export default function NewSupplierClaim() {
             )}
 
             <div className="form-group">
+              <label>검사 수량 (EA)</label>
+              <input type="number" placeholder="불량률 계산 기준" min="0" value={form.inspection_quantity} onChange={set('inspection_quantity')} />
+            </div>
+            <div className="form-group">
               <label>불량 수량 (EA) <span className="required-star">*</span></label>
               <input type="number" placeholder="0" min="0" value={form.defect_quantity} onChange={set('defect_quantity')} />
             </div>
             <div className="form-group">
               <label>불량률 (자동)</label>
               <div style={{ padding: '8px 12px', border: '1px solid #e2e8f0', borderRadius: 8, background: '#f8fafc', fontSize: 13, fontWeight: defRate !== null ? 700 : 400, color: defRate !== null ? (parseFloat(defRate) > 5 ? '#dc2626' : '#059669') : '#94a3b8', display: 'flex', alignItems: 'center', gap: 6, minHeight: 38 }}>
-                {defRate !== null ? <>{parseFloat(defRate) > 5 ? '🔴' : '🟢'} {defRate}% <span style={{ fontSize: 11, fontWeight: 400, color: '#94a3b8' }}>({defQty}/{qty}개)</span></> : <span style={{ fontSize: 12 }}>수량 입력 시 자동 계산</span>}
+                {defRate !== null ? <>{parseFloat(defRate) > 5 ? '🔴' : '🟢'} {defRate}% <span style={{ fontSize: 11, fontWeight: 400, color: '#94a3b8' }}>({defQty}/{insQty}개)</span></> : <span style={{ fontSize: 12 }}>검사수량+불량수량 입력 시 자동 계산</span>}
               </div>
             </div>
-            <div className="form-group form-span-2" />
+            <div className="form-group" />
 
             <div className="form-group form-span-4">
               <label>불량 유형 <span className="required-star">*</span></label>
@@ -334,6 +340,12 @@ export default function NewSupplierClaim() {
         <PartSearchModal
           onSelect={(pn, pm) => setForm(prev => ({ ...prev, part_number: pn, part_name: pm }))}
           onClose={() => setPartSearchOpen(false)}
+        />
+      )}
+      {supplierSearchOpen && (
+        <SupplierSearchModal
+          onSelect={name => setVal('supplier_name', name)}
+          onClose={() => setSupplierSearch(false)}
         />
       )}
     </div>

@@ -231,3 +231,24 @@ CREATE POLICY "sil_delete" ON supplier_improvement_logs FOR DELETE USING (auth.r
 ALTER TABLE supplier_claims ADD COLUMN IF NOT EXISTS disposition  TEXT;
 ALTER TABLE supplier_claims ADD COLUMN IF NOT EXISTS purchase_dept TEXT;
 ALTER TABLE supplier_claims ADD COLUMN IF NOT EXISTS notes        TEXT;
+
+-- ============================================================
+-- Phase 4: 공급사 마스터 + 검사수량 컬럼 추가
+-- ============================================================
+
+-- 공급사 마스터 테이블
+CREATE TABLE IF NOT EXISTS suppliers (
+  id         TEXT PRIMARY KEY,
+  name       TEXT UNIQUE NOT NULL,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+ALTER TABLE suppliers ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "sup_select" ON suppliers FOR SELECT USING (true);
+CREATE POLICY "sup_insert" ON suppliers FOR INSERT WITH CHECK (auth.role() = 'authenticated');
+CREATE POLICY "sup_update" ON suppliers FOR UPDATE USING (auth.role() = 'authenticated');
+CREATE POLICY "sup_delete" ON suppliers FOR DELETE USING (auth.role() = 'authenticated');
+
+-- 검사수량 컬럼 (불량률 = 불량수량 / 검사수량)
+ALTER TABLE supplier_claims ADD COLUMN IF NOT EXISTS inspection_quantity INTEGER;

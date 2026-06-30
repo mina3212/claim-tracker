@@ -18,6 +18,7 @@ import Parts       from './pages/Parts';
 import SupplierClaimList   from './pages/SupplierClaimList';
 import SupplierClaimDetail from './pages/SupplierClaimDetail';
 import NewSupplierClaim    from './pages/NewSupplierClaim';
+import Suppliers           from './pages/Suppliers';
 import AnalysisReport      from './pages/AnalysisReport';
 
 function SupplierGuard({ children }) {
@@ -66,6 +67,7 @@ function AppRoutes() {
               <Route path="supplier-claims" element={<SupplierGuard><SupplierClaimList /></SupplierGuard>} />
               <Route path="supplier-claims/new" element={<SupplierGuard><NewSupplierClaim /></SupplierGuard>} />
               <Route path="supplier-claims/:id" element={<SupplierGuard><SupplierClaimDetail /></SupplierGuard>} />
+              <Route path="suppliers" element={<SupplierGuard><Suppliers /></SupplierGuard>} />
               <Route path="analysis" element={<SupplierGuard><AnalysisReport /></SupplierGuard>} />
               <Route path="*" element={<Navigate to="/" replace />} />
             </Route>

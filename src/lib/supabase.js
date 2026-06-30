@@ -27,10 +27,10 @@ export const SUPPLIER_STAGE_COLORS = {
 };
 
 export const CUSTOMER_GROUPS     = ['KT', 'LG', 'SK', '해외고객사', '온라인몰', '기타'];
-export const PRODUCT_TYPES       = ['수입품', '자체제작상품', '내수품'];
+export const PRODUCT_TYPES       = ['수입부품', '수입완제품', '내수부품', '내수완제품'];
 export const PRODUCT_CATEGORIES  = ['광분배함류', '광접속함체류', '광커넥터류', '광점퍼코드류', '동자재', '기타'];
 export const DEPARTMENTS         = ['영업팀', '마케팅팀', '품질기술팀', '영업관리팀'];
-export const DEFECT_TYPES        = ['치수불량', '외관불량', '기능불량', '포장불량', '수량부족', '기타'];
+export const DEFECT_TYPES        = ['치수불량', '외관불량', '조립불량', '기능불량', '포장불량', '수량부족', '기타'];
 export const RETURN_STATUSES     = ['미결', '반품', '교환', '폐기'];
 export const INSPECTION_STAGES   = ['부품 수입검사', '완제품 입고검사', '출하검사'];
 export const IMPROVEMENT_RESULTS = ['확인중', '개선', '미개선'];
@@ -292,7 +292,41 @@ export async function deleteAllParts() {
   if (error) throw error;
 }
 
-// ── Supplier name autocomplete ────────────────────────────────
+// ── Suppliers master ──────────────────────────────────────────
+export async function fetchSuppliers() {
+  const { data, error } = await sb.from('suppliers').select('*').order('name');
+  if (error) throw error;
+  return data || [];
+}
+
+export async function searchSuppliers(query) {
+  if (!query || !query.trim()) return [];
+  const { data, error } = await sb
+    .from('suppliers')
+    .select('id, name')
+    .ilike('name', `%${query.trim()}%`)
+    .order('name')
+    .limit(20);
+  if (error) throw error;
+  return data || [];
+}
+
+export async function upsertSuppliers(rows) {
+  const { error } = await sb.from('suppliers').upsert(rows, { onConflict: 'name' });
+  if (error) throw error;
+}
+
+export async function deleteSupplier(id) {
+  const { error } = await sb.from('suppliers').delete().eq('id', id);
+  if (error) throw error;
+}
+
+export async function deleteAllSuppliers() {
+  const { error } = await sb.from('suppliers').delete().neq('id', '');
+  if (error) throw error;
+}
+
+// ── Supplier name autocomplete (legacy fallback) ──────────────
 export async function searchSupplierNames(query) {
   if (!query || !query.trim()) return [];
   const { data } = await sb
