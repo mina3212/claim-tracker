@@ -58,15 +58,20 @@ export default function Parts() {
         return;
       }
 
+      // 기존 품번 → ID 맵 (같은 품번이면 기존 ID 재사용, 새 품번만 uid 생성)
+      const existingIdMap = Object.fromEntries(parts.map(p => [p.part_number, p.id]));
       const seen = new Set();
       const upsertRows = rows
         .filter(r => r[numCol]?.toString().trim())
-        .map(r => ({
-          id: uid(),
-          part_number: r[numCol].toString().trim(),
-          part_name:   r[nameCol]?.toString().trim() || '',
-          spec:        specCol ? (r[specCol]?.toString().trim() || null) : null,
-        }))
+        .map(r => {
+          const pn = r[numCol].toString().trim();
+          return {
+            id:          existingIdMap[pn] || uid(),
+            part_number: pn,
+            part_name:   r[nameCol]?.toString().trim() || '',
+            spec:        specCol ? (r[specCol]?.toString().trim() || null) : null,
+          };
+        })
         .filter(r => {
           if (seen.has(r.part_number)) return false;
           seen.add(r.part_number);

@@ -55,10 +55,11 @@ export default function Suppliers() {
         return;
       }
 
+      const existingIdMap = Object.fromEntries(suppliers.map(s => [s.name, s.id]));
       const seen = new Set();
       const upsertRows = rows
         .filter(r => r[nameCol]?.toString().trim())
-        .map(r => ({ id: uid(), name: r[nameCol].toString().trim() }))
+        .map(r => { const n = r[nameCol].toString().trim(); return { id: existingIdMap[n] || uid(), name: n }; })
         .filter(r => { if (seen.has(r.name)) return false; seen.add(r.name); return true; });
 
       await upsertSuppliers(upsertRows);
