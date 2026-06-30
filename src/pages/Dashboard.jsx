@@ -124,6 +124,12 @@ export default function Dashboard() {
               ➕ 공급사 불량 접수
             </button>
           )}
+          {showSupplier && (
+            <button className="btn btn-sm" onClick={() => navigate('/analysis')}
+              style={{ background: '#0f172a', color: '#fff', border: 'none' }}>
+              🤖 AI 분석 보고서
+            </button>
+          )}
         </div>
       </div>
 
