@@ -487,8 +487,8 @@ export async function deleteImprovementLog(id) {
 const BUCKET = 'supplier-attachments';
 
 export async function uploadSupplierFile(file, claimId) {
-  const safeName = file.name.replace(/\s+/g, '_');
-  const path = `${claimId}/${Date.now()}_${safeName}`;
+  const ext = file.name.includes('.') ? '.' + file.name.split('.').pop() : '';
+  const path = `${claimId}/${uid()}${ext}`;
   const { error } = await sb.storage.from(BUCKET).upload(path, file, { cacheControl: '3600', upsert: false });
   if (error) throw error;
   return { path, name: file.name, size: file.size, type: file.type };
