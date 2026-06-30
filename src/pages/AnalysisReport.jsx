@@ -2,6 +2,7 @@ import { useState, useMemo } from 'react';
 import { useClaims } from '../context/ClaimsContext';
 import { useSupplierClaims } from '../context/SupplierClaimsContext';
 import { usePrintTitle } from '../context/PrintContext';
+import { DISPOSITION_COLORS } from '../lib/supabase';
 
 const GEMINI_KEY = import.meta.env.VITE_GEMINI_API_KEY;
 const GEMINI_URL = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${GEMINI_KEY}`;
@@ -136,6 +137,12 @@ const defaultStart = () => {
 };
 const defaultEnd = () => new Date().toISOString().slice(0, 10);
 
+function topEntries(items, key, n = 5) {
+  const cnt = {};
+  items.forEach(c => { const k = c[key] || '(미분류)'; cnt[k] = (cnt[k] || 0) + 1; });
+  return Object.entries(cnt).sort(([,a],[,b]) => b-a).slice(0, n);
+}
+
 export default function AnalysisReport({ embedded = false }) {
   const { claims }   = useClaims();
   const { claims: supplierClaims } = useSupplierClaims();
@@ -158,6 +165,26 @@ export default function AnalysisReport({ embedded = false }) {
   }), [supplierClaims, start, end]);
 
   const total = filteredC.length + filteredS.length;
+
+  /* ── 요약 통계 (AI 없이도 항상 표시) ── */
+  const stats = useMemo(() => {
+    const cClosed   = filteredC.filter(c => c.current_stage === '종결').length;
+    const cPending  = filteredC.length - cClosed;
+    const sPending  = filteredS.filter(c => !c.disposition).length;
+    const sDone     = filteredS.filter(c =>  c.disposition).length;
+
+    const totalIn  = filteredS.reduce((s, c) => s + (c.quantity || 0), 0);
+    const totalDef = filteredS.reduce((s, c) => s + (c.defect_quantity || 0), 0);
+    const defRate  = totalIn > 0 ? ((totalDef / totalIn) * 100).toFixed(2) : null;
+
+    const topCustomers  = topEntries(filteredC, 'customer_name');
+    const topCDefects   = topEntries(filteredC, 'defect_type');
+    const topSuppliers  = topEntries(filteredS, 'supplier_name');
+    const topSDefects   = topEntries(filteredS, 'defect_type');
+    const dispositions  = topEntries(filteredS, 'disposition');
+
+    return { cClosed, cPending, sPending, sDone, totalIn, totalDef, defRate, topCustomers, topCDefects, topSuppliers, topSDefects, dispositions };
+  }, [filteredC, filteredS]);
 
   const generate = async () => {
     if (!GEMINI_KEY) {
@@ -279,6 +306,103 @@ export default function AnalysisReport({ embedded = false }) {
           </div>
         )}
       </div>
+
+      {/* ── 데이터 요약 (항상 표시) ── */}
+      {total > 0 && (
+        <div style={{ marginBottom: 16 }}>
+          {/* KPI 행 */}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 10, marginBottom: 12 }}>
+            {[
+              { label: '고객사 클레임', value: filteredC.length + '건', sub: `미결 ${stats.cPending}건`, color: '#3b82f6' },
+              { label: '클레임 종결률', value: filteredC.length > 0 ? ((stats.cClosed / filteredC.length) * 100).toFixed(0) + '%' : '-', sub: `종결 ${stats.cClosed}건`, color: '#10b981' },
+              { label: '공급사 불량',  value: filteredS.length + '건', sub: `미결 ${stats.sPending}건`, color: '#f59e0b' },
+              { label: '전체 불량률',  value: stats.defRate != null ? stats.defRate + '%' : '-', sub: `${stats.totalDef.toLocaleString()} / ${stats.totalIn.toLocaleString()} EA`, color: stats.defRate > 5 ? '#dc2626' : '#059669' },
+            ].map(item => (
+              <div key={item.label} className="card" style={{ textAlign: 'center', padding: '14px 12px' }}>
+                <div style={{ fontSize: 11, color: '#64748b', marginBottom: 4 }}>{item.label}</div>
+                <div style={{ fontSize: 24, fontWeight: 800, color: item.color }}>{item.value}</div>
+                <div style={{ fontSize: 11, color: '#94a3b8', marginTop: 2 }}>{item.sub}</div>
+              </div>
+            ))}
+          </div>
+
+          {/* 상세 분석 그리드 */}
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+            {/* 고객사 클레임 TOP */}
+            <div className="card" style={{ padding: '14px 16px' }}>
+              <div style={{ fontSize: 12, fontWeight: 700, color: '#1d4ed8', marginBottom: 10 }}>📋 주요 고객사 (클레임 건수)</div>
+              {stats.topCustomers.length === 0
+                ? <div style={{ fontSize: 12, color: '#94a3b8' }}>데이터 없음</div>
+                : stats.topCustomers.map(([name, cnt], i) => {
+                    const pct = filteredC.length > 0 ? Math.round(cnt / filteredC.length * 100) : 0;
+                    return (
+                      <div key={name} style={{ marginBottom: 6 }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, marginBottom: 2 }}>
+                          <span style={{ fontWeight: i === 0 ? 700 : 400, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '65%' }}>{name}</span>
+                          <span style={{ color: '#64748b', flexShrink: 0 }}>{cnt}건 ({pct}%)</span>
+                        </div>
+                        <div style={{ background: '#f1f5f9', borderRadius: 3, height: 5 }}>
+                          <div style={{ background: '#3b82f6', width: `${pct}%`, height: '100%', borderRadius: 3 }} />
+                        </div>
+                      </div>
+                    );
+                  })}
+            </div>
+
+            {/* 공급사 불량 TOP */}
+            <div className="card" style={{ padding: '14px 16px' }}>
+              <div style={{ fontSize: 12, fontWeight: 700, color: '#92400e', marginBottom: 10 }}>🏭 주요 공급사 (불량 건수)</div>
+              {stats.topSuppliers.length === 0
+                ? <div style={{ fontSize: 12, color: '#94a3b8' }}>데이터 없음</div>
+                : stats.topSuppliers.map(([name, cnt], i) => {
+                    const pct = filteredS.length > 0 ? Math.round(cnt / filteredS.length * 100) : 0;
+                    return (
+                      <div key={name} style={{ marginBottom: 6 }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, marginBottom: 2 }}>
+                          <span style={{ fontWeight: i === 0 ? 700 : 400, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '65%' }}>{name}</span>
+                          <span style={{ color: '#64748b', flexShrink: 0 }}>{cnt}건 ({pct}%)</span>
+                        </div>
+                        <div style={{ background: '#f1f5f9', borderRadius: 3, height: 5 }}>
+                          <div style={{ background: '#f59e0b', width: `${pct}%`, height: '100%', borderRadius: 3 }} />
+                        </div>
+                      </div>
+                    );
+                  })}
+            </div>
+
+            {/* 클레임 불량유형 TOP */}
+            <div className="card" style={{ padding: '14px 16px' }}>
+              <div style={{ fontSize: 12, fontWeight: 700, color: '#5b21b6', marginBottom: 10 }}>⚠️ 고객사 클레임 불량유형</div>
+              {stats.topCDefects.length === 0
+                ? <div style={{ fontSize: 12, color: '#94a3b8' }}>데이터 없음</div>
+                : <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                    {stats.topCDefects.map(([name, cnt]) => (
+                      <span key={name} style={{ fontSize: 11, padding: '3px 10px', borderRadius: 99, background: '#f3e8ff', color: '#6b21a8', fontWeight: 600 }}>
+                        {name} {cnt}건
+                      </span>
+                    ))}
+                  </div>}
+            </div>
+
+            {/* 공급사 처리결과 */}
+            <div className="card" style={{ padding: '14px 16px' }}>
+              <div style={{ fontSize: 12, fontWeight: 700, color: '#065f46', marginBottom: 10 }}>✅ 공급사 불량 처리결과</div>
+              {stats.dispositions.length === 0
+                ? <div style={{ fontSize: 12, color: '#94a3b8' }}>데이터 없음</div>
+                : <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                    {stats.dispositions.map(([name, cnt]) => {
+                      const dc = DISPOSITION_COLORS[name] || DISPOSITION_COLORS['미결'];
+                      return (
+                        <span key={name} style={{ fontSize: 11, padding: '3px 10px', borderRadius: 99, background: dc.bg, color: dc.text, fontWeight: 600 }}>
+                          {name} {cnt}건
+                        </span>
+                      );
+                    })}
+                  </div>}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* 에러 */}
       {error && (

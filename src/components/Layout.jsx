@@ -106,6 +106,14 @@ export default function Layout() {
               <NavLink to="/supplier-analytics" className={({ isActive }) => `nav-item${isActive ? ' active' : ''}`}>
                 <span>📊</span> 누적 분석
               </NavLink>
+
+              <div style={{ fontSize: 10, color: '#94a3b8', fontWeight: 700, letterSpacing: .8, padding: '10px 14px 4px', textTransform: 'uppercase' }}>
+                종합 보고서
+              </div>
+              <NavLink to="/analysis" className={({ isActive }) => `nav-item${isActive ? ' active' : ''}`}
+                style={({ isActive }) => isActive ? { background: 'linear-gradient(90deg,#0f172a,#1e293b)', color: '#fff' } : {}}>
+                <span>🤖</span> AI 종합 분석
+              </NavLink>
             </>
           )}
 
