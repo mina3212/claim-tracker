@@ -28,6 +28,8 @@ export default function UserManual() {
               '4. 처리결과보고서 발행',
               '5. 수정 권한 안내',
               '6. 분석 / 대시보드 활용',
+              '7. 공급사 불량 관리',
+              '8. AI 종합 분석 보고서',
             ].map(item => (
               <div key={item} style={{ fontSize: 13, color: '#1e40af', padding: '6px 0', borderBottom: '1px solid #dbeafe' }}>
                 {item}
@@ -147,6 +149,13 @@ export default function UserManual() {
                 ['이력 항목 수정', '✅ 가능', '✅ 가능'],
                 ['클레임 삭제', '⚠️ 삭제 요청만 가능', '✅ 직접 삭제 가능'],
                 ['삭제 요청 승인/거절', '❌ 불가', '✅ 가능'],
+                ['공급사 불량 접수/수정', '❌ 품질기술팀·관리자만', '✅ 가능'],
+                ['시정조치 현황 수정', '❌ 품질기술팀·관리자만', '✅ 가능'],
+                ['첨부파일 업로드/조회', '❌ 품질기술팀·관리자만', '✅ 가능'],
+                ['첨부파일 삭제', '❌ 불가', '✅ 가능'],
+                ['다운로드 이력 조회', '❌ 불가', '✅ 가능'],
+                ['공급사·품번 관리', '❌ 불가', '✅ 가능'],
+                ['누적 분석 / AI 보고서', '❌ 품질기술팀·관리자만', '✅ 가능'],
               ].map(([feature, user, admin], i) => (
                 <tr key={i} style={{ background: i % 2 === 0 ? '#fff' : '#f9fafb' }}>
                   <td style={{ border: '1px solid #d1d5db', padding: '8px 12px', fontWeight: 600 }}>{feature}</td>
@@ -194,6 +203,135 @@ export default function UserManual() {
             ))}
           </div>
           <p style={{ ...bodyText, marginTop: 12 }}>기간 필터(연도/반기/분기)와 고객사 그룹 필터를 조합해 원하는 범위로 분석할 수 있습니다.</p>
+        </Section>
+
+        {/* 7. 공급사 불량 관리 */}
+        <Section color="#0f766e">
+          <SectionTitle icon="🏭" title="7. 공급사 불량 관리" />
+          <InfoBox>
+            <strong>접근 권한:</strong> 품질기술팀 · 관리자만 이용할 수 있습니다. 왼쪽 메뉴 <Tag>공급사 불량</Tag> 섹션에서 접근합니다.
+          </InfoBox>
+
+          <SubTitle>📋 불량 목록</SubTitle>
+          <p style={bodyText}>입고된 공급사 불량 이력 전체를 확인합니다. 처리결과·공급사·<strong>시정조치 상태</strong>로 필터링할 수 있습니다.</p>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8, marginTop: 8 }}>
+            {[
+              { label: '미조치', color: '#f1f5f9', text: '#64748b', desc: '아직 시정조치 미등록' },
+              { label: '진행중', color: '#fef3c7', text: '#92400e', desc: '조치 완료 전 진행 단계' },
+              { label: '완료',   color: '#d1fae5', text: '#065f46', desc: '시정조치 및 검증 완료' },
+            ].map(({ label, color, text, desc }) => (
+              <div key={label} style={{ background: color, borderRadius: 8, padding: '10px 14px' }}>
+                <div style={{ fontWeight: 700, fontSize: 13, color: text, marginBottom: 4 }}>{label}</div>
+                <div style={{ fontSize: 12, color: '#475569' }}>{desc}</div>
+              </div>
+            ))}
+          </div>
+          <p style={{ ...bodyText, marginTop: 10 }}>📎 아이콘이 표시된 행은 성적서 등 첨부파일이 있는 건입니다.</p>
+
+          <SubTitle>➕ 불량 접수</SubTitle>
+          <p style={bodyText}>왼쪽 메뉴 <Tag>불량 접수</Tag> 또는 목록 우측 상단 <Tag>+ 불량 접수</Tag> 버튼으로 신규 불량을 등록합니다.</p>
+          <StepList steps={[
+            { title: '공급사 검색', desc: '공급사명을 입력하거나 🔍 버튼으로 등록된 공급사를 검색합니다. (공급사 관리에 미리 등록 필요)' },
+            { title: '입고 정보 입력', desc: '입고일, 입고 차수(예: 2024-3차), 입고 LOT, 구매 경로(구매/SCM팀 등)를 입력합니다.' },
+            { title: '품번·품명 입력', desc: '🔍 버튼으로 품번을 검색하거나 직접 입력합니다. 불량 수량과 입고 수량을 입력하면 불량률이 자동 계산됩니다.' },
+            { title: '검사 단계 선택', desc: '부품 수입검사 / 완제품 입고검사 / 출하검사 중 해당 단계를 선택합니다. "부품 수입검사" 선택 시 캐비티 수 입력란이 추가됩니다.' },
+            { title: '불량 유형 및 상세 내용 입력', desc: '치수불량·외관불량·조립불량 등 유형을 선택하고, 불량 내용을 상세히 기술합니다.' },
+            { title: '성적서·첨부파일 첨부 (선택)', desc: '파일 첨부 영역에 PDF, 이미지, Excel 등을 드래그하거나 클릭해서 첨부합니다. 최대 20MB.' },
+            { title: '접수 등록', desc: '"불량 접수" 버튼을 눌러 완료합니다.' },
+          ]} />
+
+          <SubTitle>🔧 시정조치 현황</SubTitle>
+          <p style={bodyText}>불량 상세 화면에서 <strong>🔧 시정조치 현황</strong> 카드를 통해 공급사 또는 내부의 조치 내용을 관리합니다.</p>
+          <StepList steps={[
+            { title: '수정 버튼 클릭', desc: '시정조치 현황 카드 우측 상단 "✏️ 수정" 버튼을 누릅니다.' },
+            { title: '조치 상태 선택', desc: '미조치 → 진행중 → 완료 순으로 상태를 선택합니다.' },
+            { title: '조치 유형 선택', desc: '공급사 클레임 / 작업자 교육 / 공정 변경 / 설계 변경 / 기타 중 해당 유형을 선택합니다.' },
+            { title: '조치 내용 상세 입력', desc: '예) "공급사에 불량 클레임 통보 및 재발방지 대책 요청 (2024-06-30), 2차 입고분부터 전수검사 실시 예정"' },
+            { title: '저장', desc: '"💾 저장" 버튼을 누르면 즉시 반영됩니다. 목록에서도 상태 배지가 업데이트됩니다.' },
+          ]} />
+
+          <SubTitle>📈 입고 차수별 개선 추적</SubTitle>
+          <p style={bodyText}>시정조치 후 다음 차수 입고 시 실제로 개선됐는지 기록합니다. 상세 화면 하단 <strong>📈 입고 차수별 개선 추적</strong> 카드에서 관리합니다.</p>
+          <StepList steps={[
+            { title: '"➕ 차수 추가" 클릭' },
+            { title: '차수·입고일·수량 입력', desc: '예: "3차", 입고일, 입고 수량, 불량 수량을 입력합니다.' },
+            { title: '개선 여부 선택', desc: '확인중 / 개선 / 미개선 중 하나를 선택합니다.' },
+            { title: '비고 입력 후 저장' },
+          ]} />
+          <InfoBox>
+            <strong>개선 여부 기준:</strong> 동일 불량 유형이 재발하지 않으면 "개선", 재발하면 "미개선", 아직 판단 전이면 "확인중"으로 설정합니다.
+          </InfoBox>
+
+          <SubTitle>📎 첨부파일 (성적서)</SubTitle>
+          <p style={bodyText}>불량 상세 화면 하단 <strong>📎 첨부파일</strong> 카드에서 성적서, 사진 등을 첨부하고 관리합니다.</p>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginTop: 8 }}>
+            {[
+              { icon: '👁', title: '미리보기', desc: '이미지는 팝업으로, PDF/문서는 새 탭으로 바로 확인 가능' },
+              { icon: '📥', title: '다운로드', desc: '원본 파일을 다운로드합니다' },
+              { icon: '🗑', title: '파일 삭제', desc: '관리자만 삭제 가능합니다' },
+              { icon: '📋', title: '다운로드 이력', desc: '관리자는 누가 언제 다운로드했는지 이력을 확인할 수 있습니다' },
+            ].map(({ icon, title, desc }) => (
+              <div key={title} style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 8, padding: '10px 14px' }}>
+                <div style={{ fontWeight: 700, fontSize: 13, color: '#0f172a', marginBottom: 4 }}>{icon} {title}</div>
+                <div style={{ fontSize: 12, color: '#64748b' }}>{desc}</div>
+              </div>
+            ))}
+          </div>
+          <InfoBox warn style={{ marginTop: 12 }}>
+            지원 형식: PDF, JPG, PNG, GIF, WebP, Excel, Word · 파일당 최대 20MB
+          </InfoBox>
+
+          <SubTitle>📊 누적 분석</SubTitle>
+          <p style={bodyText}>왼쪽 메뉴 <Tag>누적 분석</Tag>에서 공급사 불량 데이터를 분석합니다.</p>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginTop: 8 }}>
+            {[
+              { tab: '공급사별', desc: '공급사별 불량 건수, 불량률, 처리결과' },
+              { tab: '품목별', desc: '품번·품명별 불량 빈도 및 불량률' },
+              { tab: '불량유형별', desc: '불량 유형 분포 및 공급사 교차 분석' },
+              { tab: '품목군별', desc: '광분배함류 등 품목군별 현황' },
+              { tab: '처리결과별', desc: '사용승인·반품·폐기 등 처리결과 분포' },
+              { tab: '월별 추이', desc: '월별 불량 발생 추이 그래프' },
+            ].map(({ tab, desc }) => (
+              <div key={tab} style={{ background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: 8, padding: '10px 14px' }}>
+                <div style={{ fontWeight: 700, fontSize: 12, color: '#065f46', marginBottom: 4 }}>{tab}</div>
+                <div style={{ fontSize: 12, color: '#334155' }}>{desc}</div>
+              </div>
+            ))}
+          </div>
+        </Section>
+
+        {/* 8. AI 종합 분석 보고서 */}
+        <Section color="#7c3aed">
+          <SectionTitle icon="🤖" title="8. AI 종합 분석 보고서" />
+          <InfoBox>
+            <strong>접근 권한:</strong> 품질기술팀 · 관리자만 이용할 수 있습니다. 왼쪽 메뉴 <Tag>🤖 AI 종합 분석</Tag>에서 접근합니다.
+          </InfoBox>
+          <p style={{ ...bodyText, marginTop: 12 }}>고객사 클레임과 공급사 불량 데이터를 통합하여 AI가 핵심 인사이트를 분석·요약해주는 기능입니다.</p>
+
+          <SubTitle>항상 표시되는 요약 현황</SubTitle>
+          <p style={bodyText}>API 키 없이도 아래 데이터가 자동으로 표시됩니다:</p>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginTop: 8 }}>
+            {[
+              '클레임 처리 현황 KPI (종결/미결 건수)',
+              '공급사 불량 현황 KPI (대기/처리 완료)',
+              '주요 고객사 TOP 5',
+              '주요 공급사 TOP 5',
+              '클레임 불량 유형 분포',
+              '공급사 처리결과 분포',
+            ].map(item => (
+              <div key={item} style={{ background: '#faf5ff', border: '1px solid #e9d5ff', borderRadius: 8, padding: '8px 12px', fontSize: 12, color: '#6b21a8' }}>
+                ✓ {item}
+              </div>
+            ))}
+          </div>
+
+          <SubTitle>AI 보고서 생성</SubTitle>
+          <StepList steps={[
+            { title: 'VITE_GEMINI_API_KEY 설정 필요', desc: 'AI 분석 기능을 사용하려면 Google Gemini API 키가 환경변수에 설정되어 있어야 합니다. (IT 담당자 문의)' },
+            { title: '"🤖 AI 보고서 생성" 버튼 클릭', desc: '전체 데이터를 분석하여 보고서를 생성합니다. 수십 초 소요될 수 있습니다.' },
+            { title: '보고서 내용 확인', desc: '주요 클레임 현황, 반복 불량 패턴, 공급사 품질 리스크, 개선 우선순위 등이 자동으로 작성됩니다.' },
+            { title: '복사 또는 인쇄', desc: '보고서를 복사하거나 브라우저 인쇄 기능으로 PDF로 저장할 수 있습니다.' },
+          ]} />
         </Section>
 
         <div style={{ marginTop: 40, textAlign: 'center', fontSize: 12, color: '#94a3b8' }}>
