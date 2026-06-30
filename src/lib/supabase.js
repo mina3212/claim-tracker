@@ -49,7 +49,7 @@ export const DISPOSITION_COLORS = {
 export const canViewSupplierClaims = (department, isAdmin) =>
   isAdmin || department === '품질기술팀';
 
-export const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+export const uid = () => crypto.randomUUID();
 
 // ── Auth ──────────────────────────────────────────────────────
 export const signIn  = (email, pw) => sb.auth.signInWithPassword({ email, password: pw });
