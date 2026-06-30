@@ -136,7 +136,7 @@ const defaultStart = () => {
 };
 const defaultEnd = () => new Date().toISOString().slice(0, 10);
 
-export default function AnalysisReport() {
+export default function AnalysisReport({ embedded = false }) {
   const { claims }   = useClaims();
   const { claims: supplierClaims } = useSupplierClaims();
   const { setPrintTitle } = usePrintTitle();
@@ -202,15 +202,17 @@ export default function AnalysisReport() {
 
   return (
     <div>
-      <div className="page-header">
-        <div>
-          <div className="page-title">🤖 AI 클레임 분석 보고서</div>
-          <div className="page-sub">기간을 선택하면 고객사 클레임 + 공급사 불량을 종합 분석합니다</div>
+      {!embedded && (
+        <div className="page-header">
+          <div>
+            <div className="page-title">🤖 AI 클레임 분석 보고서</div>
+            <div className="page-sub">기간을 선택하면 고객사 클레임 + 공급사 불량을 종합 분석합니다</div>
+          </div>
+          {report && (
+            <button className="btn btn-ghost btn-sm no-print" onClick={() => window.print()}>🖨️ 인쇄/PDF</button>
+          )}
         </div>
-        {report && (
-          <button className="btn btn-ghost btn-sm no-print" onClick={() => window.print()}>🖨️ 인쇄/PDF</button>
-        )}
-      </div>
+      )}
 
       {/* API 키 미설정 안내 */}
       {noKey && (

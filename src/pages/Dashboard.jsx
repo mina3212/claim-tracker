@@ -6,6 +6,7 @@ import { useAuth } from '../context/AuthContext';
 import StageBadge from '../components/StageBadge';
 import { STAGES, STAGE_COLORS, STAGE_ICONS, SUPPLIER_STAGES, SUPPLIER_STAGE_COLORS, SUPPLIER_STAGE_ICONS, canViewSupplierClaims } from '../lib/supabase';
 import { usePrintTitle } from '../context/PrintContext';
+import AnalysisReport from './AnalysisReport';
 
 const OVERLAY = {
   position: 'fixed', inset: 0, background: 'rgba(0,0,0,.45)',
@@ -124,29 +125,28 @@ export default function Dashboard() {
               ➕ 공급사 불량 접수
             </button>
           )}
-          {showSupplier && (
-            <button className="btn btn-sm" onClick={() => navigate('/analysis')}
-              style={{ background: '#0f172a', color: '#fff', border: 'none' }}>
-              🤖 AI 분석 보고서
-            </button>
-          )}
         </div>
       </div>
 
       {/* 탭 (공급사 볼 수 있는 경우만) */}
       {showSupplier && (
-        <div style={{ display: 'flex', gap: 6, marginBottom: 16 }}>
-          {[{ id: 'customer', label: '📋 고객사 클레임', count: total }, { id: 'supplier', label: '🏭 공급사 불량', count: sTotal }].map(tab => (
+        <div style={{ display: 'flex', gap: 6, marginBottom: 16, flexWrap: 'wrap' }}>
+          {[
+            { id: 'customer', label: '📋 고객사 클레임', count: total },
+            { id: 'supplier', label: '🏭 공급사 불량',  count: sTotal },
+            { id: 'analysis', label: '🤖 AI 종합 보고서', count: null },
+          ].map(tab => (
             <button key={tab.id} onClick={() => setActiveTab(tab.id)}
               style={{
                 padding: '8px 18px', borderRadius: 20, fontSize: 13, fontWeight: 600,
                 cursor: 'pointer', border: '2px solid',
-                background: activeTab === tab.id ? '#1e293b' : '#fff',
+                background: activeTab === tab.id ? (tab.id === 'analysis' ? '#0f172a' : '#1e293b') : '#fff',
                 color: activeTab === tab.id ? '#fff' : '#64748b',
-                borderColor: activeTab === tab.id ? '#1e293b' : '#e2e8f0',
+                borderColor: activeTab === tab.id ? (tab.id === 'analysis' ? '#0f172a' : '#1e293b') : '#e2e8f0',
                 fontFamily: 'inherit',
               }}>
-              {tab.label} <span style={{ fontSize: 11, fontWeight: 400, marginLeft: 4 }}>({tab.count})</span>
+              {tab.label}
+              {tab.count !== null && <span style={{ fontSize: 11, fontWeight: 400, marginLeft: 4 }}>({tab.count})</span>}
             </button>
           ))}
         </div>
@@ -329,6 +329,11 @@ export default function Dashboard() {
         </div>
 
       </> /* end supplier tab */}
+
+      {/* ── AI 종합 보고서 탭 ── */}
+      {showSupplier && activeTab === 'analysis' && (
+        <AnalysisReport />
+      )}
 
       {/* 카드 클릭 요약 모달 */}
       {modal && (
