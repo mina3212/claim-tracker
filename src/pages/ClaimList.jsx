@@ -9,7 +9,7 @@ import DeleteRequestModal from '../components/DeleteRequestModal';
 import { usePrintTitle } from '../context/PrintContext';
 
 export default function ClaimList() {
-  const { claims, loading, removeClaim, deleteRequests, addDeleteRequest } = useClaims();
+  const { claims, loading, stages, removeClaim, deleteRequests, addDeleteRequest } = useClaims();
   const { user, isAdmin } = useAuth();
   const toast    = useToast();
   const navigate = useNavigate();
@@ -32,6 +32,25 @@ export default function ClaimList() {
   const setCustomerFilter = (v) => setSearchParams(prev => { const p = new URLSearchParams(prev); v === 'all' ? p.delete('customer') : p.set('customer', v); return p; });
 
   const customers = useMemo(() => [...new Set(claims.map(c => c.customer_name).filter(Boolean))].sort(), [claims]);
+
+  const causeMap = useMemo(() => {
+    const map = {};
+    (stages || []).forEach(s => {
+      if (s.stage_name !== '회수품 원인분석') return;
+      const match = (s.description || '').match(/\[원인\]\s*(.+)/);
+      if (match) map[s.claim_id] = match[1].split(',').map(c => c.trim()).filter(Boolean);
+    });
+    return map;
+  }, [stages]);
+
+  const CAUSE_COLORS = {
+    '사용자 과실': { bg: '#fef3c7', text: '#92400e' },
+    '생산공정':   { bg: '#ede9fe', text: '#5b21b6' },
+    '제품불량':   { bg: '#fee2e2', text: '#991b1b' },
+    '구조불량':   { bg: '#fce7f3', text: '#9d174d' },
+    '배송오류':   { bg: '#dbeafe', text: '#1e40af' },
+    '기타':       { bg: '#f1f5f9', text: '#475569' },
+  };
 
   const filtered = useMemo(() => {
     const q = search.toLowerCase().trim();
@@ -129,6 +148,7 @@ export default function ClaimList() {
                   <th>수량</th>
                   <th>LOT</th>
                   <th>불량내용</th>
+                  <th>불량원인</th>
                   <th>현재 단계</th>
                   <th>영업담당</th>
                   {user && <th></th>}
@@ -150,9 +170,19 @@ export default function ClaimList() {
                       {c.quantity != null ? Number(c.quantity).toLocaleString() : '-'}
                     </td>
                     <td className="mono">{c.lot_number || '-'}</td>
-                    <td style={{ maxWidth: 160, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
+                    <td style={{ maxWidth: 140, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
                         title={c.defect_description}>
                       {c.defect_description || '-'}
+                    </td>
+                    <td style={{ minWidth: 80 }}>
+                      {(causeMap[c.id] || []).map(cause => {
+                        const col = CAUSE_COLORS[cause] || CAUSE_COLORS['기타'];
+                        return (
+                          <span key={cause} style={{ display: 'inline-block', fontSize: 10, padding: '1px 6px', borderRadius: 99, background: col.bg, color: col.text, fontWeight: 600, marginRight: 3, marginBottom: 2, whiteSpace: 'nowrap' }}>
+                            {cause}
+                          </span>
+                        );
+                      })}
                     </td>
                     <td><StageBadge stage={c.current_stage} size="sm" /></td>
                     <td>{c.sales_rep_name || '-'}</td>
