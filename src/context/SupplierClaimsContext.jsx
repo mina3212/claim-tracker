@@ -1,5 +1,5 @@
 import { createContext, useContext, useState, useEffect, useCallback } from 'react';
-import { fetchSupplierClaims, fetchAllSupplierStages, fetchImprovementLogs } from '../lib/supabase';
+import { fetchSupplierClaims, fetchAllSupplierStages, fetchImprovementLogs, fetchClaimIdsWithFiles } from '../lib/supabase';
 
 const SupplierClaimsCtx = createContext(null);
 
@@ -7,20 +7,23 @@ export function SupplierClaimsProvider({ children }) {
   const [claims,           setClaims]           = useState([]);
   const [stages,           setStages]           = useState([]);
   const [improvementLogs,  setImprovementLogs]  = useState([]);
+  const [fileClaimIds,     setFileClaimIds]     = useState(new Set());
   const [loading, setLoading] = useState(true);
   const [dbReady, setDbReady] = useState(true);
 
   const refresh = useCallback(async () => {
     setLoading(true);
     try {
-      const [c, s, imp] = await Promise.all([
+      const [c, s, imp, fileIds] = await Promise.all([
         fetchSupplierClaims(),
         fetchAllSupplierStages(),
         fetchImprovementLogs().catch(() => []),
+        fetchClaimIdsWithFiles().catch(() => []),
       ]);
       setClaims(c);
       setStages(s);
       setImprovementLogs(imp || []);
+      setFileClaimIds(new Set(fileIds));
       setDbReady(true);
     } catch (e) {
       if (e.code === '42P01') setDbReady(false);
@@ -28,6 +31,10 @@ export function SupplierClaimsProvider({ children }) {
     } finally {
       setLoading(false);
     }
+  }, []);
+
+  const markClaimHasFiles = useCallback((claimId) => {
+    setFileClaimIds(prev => new Set([...prev, claimId]));
   }, []);
 
   useEffect(() => { refresh(); }, [refresh]);
@@ -74,10 +81,11 @@ export function SupplierClaimsProvider({ children }) {
 
   return (
     <SupplierClaimsCtx.Provider value={{
-      claims, stages, improvementLogs, loading, dbReady,
+      claims, stages, improvementLogs, fileClaimIds, loading, dbReady,
       refresh, getStagesFor, addClaim, updateClaimStage, updateClaimData,
       removeClaim, patchStageEntry,
       addImprovementLog, updateImpLog, removeImpLog,
+      markClaimHasFiles,
     }}>
       {children}
     </SupplierClaimsCtx.Provider>

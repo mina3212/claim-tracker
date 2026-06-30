@@ -7,7 +7,7 @@ import { deleteSupplierClaim, DISPOSITION_COLORS } from '../lib/supabase';
 import { usePrintTitle } from '../context/PrintContext';
 
 export default function SupplierClaimList() {
-  const { claims, loading, removeClaim } = useSupplierClaims();
+  const { claims, loading, removeClaim, fileClaimIds } = useSupplierClaims();
   const { isAdmin } = useAuth();
   const toast    = useToast();
   const navigate = useNavigate();
@@ -127,6 +127,7 @@ export default function SupplierClaimList() {
                   <th>불량 유형</th>
                   <th style={{ textAlign: 'right' }}>불량/입고</th>
                   <th>처리결과</th>
+                  <th style={{ textAlign: 'center' }}>📎</th>
                   <th></th>
                 </tr>
               </thead>
@@ -167,6 +168,11 @@ export default function SupplierClaimList() {
                       </td>
                       <td>
                         <span style={{ fontSize: 11, padding: '2px 8px', borderRadius: 99, background: dc.bg, color: dc.text, fontWeight: 600, whiteSpace: 'nowrap' }}>{disp}</span>
+                      </td>
+                      <td style={{ textAlign: 'center' }}>
+                        {fileClaimIds?.has(c.id) && (
+                          <span title="첨부파일 있음" style={{ fontSize: 14 }}>📎</span>
+                        )}
                       </td>
                       <td onClick={e => e.stopPropagation()}>
                         {isAdmin && (

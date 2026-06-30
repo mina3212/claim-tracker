@@ -500,6 +500,12 @@ export async function getSupplierFileUrl(filePath) {
   return data.signedUrl;
 }
 
+export async function fetchClaimIdsWithFiles() {
+  const { data, error } = await sb.from('supplier_claim_files').select('claim_id');
+  if (error) throw error;
+  return [...new Set((data || []).map(r => r.claim_id))];
+}
+
 export async function fetchSupplierFiles(claimId) {
   const { data, error } = await sb.from('supplier_claim_files').select('*').eq('claim_id', claimId).order('created_at');
   if (error) throw error;

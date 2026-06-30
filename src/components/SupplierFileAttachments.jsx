@@ -5,6 +5,7 @@ import {
   logFileDownload, fetchDownloadLogs,
 } from '../lib/supabase';
 import { useToast } from '../context/ToastContext';
+import { useSupplierClaims } from '../context/SupplierClaimsContext';
 
 const FILE_ACCEPT = '.pdf,.jpg,.jpeg,.png,.gif,.webp,.xlsx,.xls,.doc,.docx';
 
@@ -26,6 +27,7 @@ function fmtSize(bytes) {
 
 export default function SupplierFileAttachments({ claimId, user, isAdmin }) {
   const toast = useToast();
+  const { markClaimHasFiles } = useSupplierClaims();
   const fileRef = useRef(null);
 
   const [files,       setFiles]       = useState([]);
@@ -74,7 +76,10 @@ export default function SupplierFileAttachments({ claimId, user, isAdmin }) {
     setFiles(prev => [...prev, ...newFiles]);
     setPending([]);
     setUploading(false);
-    if (newFiles.length) toast('업로드 완료', `${newFiles.length}개 파일이 첨부되었습니다`, 'success');
+    if (newFiles.length) {
+      markClaimHasFiles(claimId);
+      toast('업로드 완료', `${newFiles.length}개 파일이 첨부되었습니다`, 'success');
+    }
   };
 
   /* ── 미리보기 ── */
