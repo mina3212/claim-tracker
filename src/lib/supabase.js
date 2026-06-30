@@ -362,8 +362,6 @@ export async function insertSupplierClaim(data, user) {
     ...data,
     id: uid(),
     current_stage: '접수',
-    user_id:    user?.id    || null,
-    user_email: user?.email || null,
     created_at: new Date().toISOString(),
   };
   const { error } = await sb.from('supplier_claims').insert(claim);
