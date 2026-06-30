@@ -13,6 +13,7 @@ import {
 import { usePrintTitle } from '../context/PrintContext';
 import PartSearchModal from '../components/PartSearchModal';
 import SupplierSearch from '../components/SupplierSearch';
+import SupplierFileAttachments from '../components/SupplierFileAttachments';
 
 const IMPROVE_COLORS = {
   '확인중': { bg: '#f1f5f9', text: '#475569' },
@@ -556,6 +557,8 @@ export default function SupplierClaimDetail() {
           </div>
         )}
       </div>
+
+      <SupplierFileAttachments claimId={id} user={user} isAdmin={isAdmin} />
 
       {partSearchOpen && (
         <PartSearchModal

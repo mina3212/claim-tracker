@@ -483,3 +483,75 @@ export async function deleteImprovementLog(id) {
   const { error } = await sb.from('supplier_improvement_logs').delete().eq('id', id);
   if (error) throw error;
 }
+
+// ── Supplier Claim Files ──────────────────────────────────────
+
+const BUCKET = 'supplier-attachments';
+
+export async function uploadSupplierFile(file, claimId) {
+  const safeName = file.name.replace(/\s+/g, '_');
+  const path = `${claimId}/${Date.now()}_${safeName}`;
+  const { error } = await sb.storage.from(BUCKET).upload(path, file, { cacheControl: '3600', upsert: false });
+  if (error) throw error;
+  return { path, name: file.name, size: file.size, type: file.type };
+}
+
+export async function getSupplierFileUrl(filePath) {
+  const { data, error } = await sb.storage.from(BUCKET).createSignedUrl(filePath, 3600);
+  if (error) throw error;
+  return data.signedUrl;
+}
+
+export async function fetchSupplierFiles(claimId) {
+  const { data, error } = await sb.from('supplier_claim_files').select('*').eq('claim_id', claimId).order('created_at');
+  if (error) throw error;
+  return data || [];
+}
+
+export async function insertSupplierFile(claimId, fileInfo, user) {
+  const row = {
+    id: uid(),
+    claim_id: claimId,
+    file_name: fileInfo.name,
+    file_path: fileInfo.path,
+    file_size: fileInfo.size,
+    file_type: fileInfo.type,
+    uploaded_by_email: user?.email || null,
+    uploaded_by_name:  user?.user_metadata?.name || user?.email || null,
+    created_at: new Date().toISOString(),
+  };
+  const { error } = await sb.from('supplier_claim_files').insert(row);
+  if (error) throw error;
+  return row;
+}
+
+export async function deleteSupplierFile(fileId, filePath) {
+  await sb.storage.from(BUCKET).remove([filePath]);
+  const { error } = await sb.from('supplier_claim_files').delete().eq('id', fileId);
+  if (error) throw error;
+}
+
+export async function logFileDownload(fileId, claimId, fileName, user) {
+  const row = {
+    id: uid(),
+    file_id: fileId,
+    claim_id: claimId,
+    file_name: fileName,
+    downloader_email: user?.email || null,
+    downloader_name:  user?.user_metadata?.name || user?.email || null,
+    downloaded_at: new Date().toISOString(),
+  };
+  const { error } = await sb.from('file_download_logs').insert(row);
+  if (error) throw error;
+  return row;
+}
+
+export async function fetchDownloadLogs(claimId) {
+  const { data, error } = await sb
+    .from('file_download_logs')
+    .select('*')
+    .eq('claim_id', claimId)
+    .order('downloaded_at', { ascending: false });
+  if (error) throw error;
+  return data || [];
+}

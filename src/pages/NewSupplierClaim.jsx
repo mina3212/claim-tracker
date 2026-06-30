@@ -1,16 +1,31 @@
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useSupplierClaims } from '../context/SupplierClaimsContext';
 import { useToast } from '../context/ToastContext';
 import {
   insertSupplierClaim,
+  uploadSupplierFile, insertSupplierFile,
   PRODUCT_TYPES, PRODUCT_CATEGORIES,
   DEFECT_TYPES, INSPECTION_STAGES,
   DISPOSITION_TYPES, DISPOSITION_COLORS, PURCHASE_DEPTS,
 } from '../lib/supabase';
 import PartSearchModal from '../components/PartSearchModal';
 import SupplierSearchModal from '../components/SupplierSearchModal';
+
+const FILE_ACCEPT = '.pdf,.jpg,.jpeg,.png,.gif,.webp,.xlsx,.xls,.doc,.docx';
+function fileIcon(type) {
+  if (!type) return '📄';
+  if (type.includes('pdf'))   return '📕';
+  if (type.includes('image')) return '🖼️';
+  return '📄';
+}
+function fmtSize(b) {
+  if (!b) return '';
+  if (b < 1024) return b + ' B';
+  if (b < 1048576) return (b / 1024).toFixed(0) + ' KB';
+  return (b / 1048576).toFixed(1) + ' MB';
+}
 
 const today = () => new Date().toISOString().slice(0, 10);
 
@@ -43,8 +58,20 @@ export default function NewSupplierClaim() {
   const navigate     = useNavigate();
   const [form, setForm]                         = useState(INITIAL);
   const [submitting, setSub]                    = useState(false);
+  const [pendingFiles, setPendingFiles]         = useState([]);
+  const [dragging,     setDragging]             = useState(false);
   const [partSearchOpen, setPartSearchOpen]     = useState(false);
   const [supplierSearchOpen, setSupplierSearch] = useState(false);
+  const fileRef = useRef(null);
+
+  const addFiles = (selected) => {
+    const valid = [...selected].filter(f => f.size <= 20 * 1024 * 1024);
+    if (valid.length < selected.length) toast('파일 크기 초과', '20MB 이하 파일만 첨부 가능합니다', 'error');
+    setPendingFiles(prev => {
+      const names = new Set(prev.map(f => f.name));
+      return [...prev, ...valid.filter(f => !names.has(f.name))];
+    });
+  };
 
   if (!user) return (
     <div>
@@ -108,6 +135,17 @@ export default function NewSupplierClaim() {
       };
       const { claim } = await insertSupplierClaim(payload, user);
       addClaim(claim);
+      // 파일 업로드 (실패해도 접수는 완료)
+      if (pendingFiles.length > 0) {
+        for (const file of pendingFiles) {
+          try {
+            const info = await uploadSupplierFile(file, claim.id);
+            await insertSupplierFile(claim.id, info, user);
+          } catch (err) {
+            toast('파일 업로드 실패', `${file.name}: ${err.message}`, 'error');
+          }
+        }
+      }
       toast('접수 완료', `${form.supplier_name} 불량이 등록되었습니다`, 'success');
       navigate(`/supplier-claims/${claim.id}`);
     } catch (err) {
@@ -328,9 +366,50 @@ export default function NewSupplierClaim() {
           </div>
         </div>
 
+        {/* ── 첨부파일 ── */}
+        <div className="form-card" style={{ marginTop: 16 }}>
+          <div className="form-card-title">📎 첨부파일 <span style={{ fontSize: 11, color: '#94a3b8', fontWeight: 400 }}>(성적서, 사진 등 · 선택)</span></div>
+          <div
+            onDragOver={e => { e.preventDefault(); setDragging(true); }}
+            onDragLeave={() => setDragging(false)}
+            onDrop={e => { e.preventDefault(); setDragging(false); addFiles([...e.dataTransfer.files]); }}
+            onClick={() => fileRef.current?.click()}
+            style={{
+              border: `2px dashed ${dragging ? '#3b82f6' : '#e2e8f0'}`,
+              borderRadius: 10, padding: pendingFiles.length ? '12px 16px' : '24px 16px',
+              cursor: 'pointer', background: dragging ? '#eff6ff' : '#f8fafc', transition: '.15s',
+            }}>
+            <input ref={fileRef} type="file" multiple accept={FILE_ACCEPT} style={{ display: 'none' }}
+              onChange={e => addFiles([...e.target.files])} />
+            {pendingFiles.length === 0 ? (
+              <div style={{ textAlign: 'center' }}>
+                <div style={{ fontSize: 24, marginBottom: 6 }}>📎</div>
+                <div style={{ fontSize: 13, color: '#64748b', fontWeight: 600 }}>파일을 드래그하거나 클릭하여 첨부</div>
+                <div style={{ fontSize: 11, color: '#94a3b8', marginTop: 4 }}>PDF, 이미지, Excel, Word · 최대 20MB</div>
+              </div>
+            ) : (
+              <div>
+                <div style={{ fontSize: 12, fontWeight: 700, color: '#0f172a', marginBottom: 8 }}>첨부 예정 ({pendingFiles.length}개)</div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                  {pendingFiles.map((f, i) => (
+                    <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13 }}>
+                      <span>{fileIcon(f.type)}</span>
+                      <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{f.name}</span>
+                      <span style={{ fontSize: 11, color: '#64748b' }}>{fmtSize(f.size)}</span>
+                      <button type="button" onClick={e => { e.stopPropagation(); setPendingFiles(prev => prev.filter((_, j) => j !== i)); }}
+                        style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#94a3b8', fontSize: 14, padding: '0 4px' }}>✕</button>
+                    </div>
+                  ))}
+                </div>
+                <div style={{ fontSize: 11, color: '#3b82f6', marginTop: 8 }}>클릭하여 파일 추가</div>
+              </div>
+            )}
+          </div>
+        </div>
+
         <div className="form-actions" style={{ marginTop: 16 }}>
           <button type="submit" className="btn btn-primary" disabled={submitting}>
-            {submitting ? '⏳ 등록 중...' : '📥 불량 접수 등록'}
+            {submitting ? (pendingFiles.length ? '⏳ 접수 및 업로드 중...' : '⏳ 등록 중...') : '📥 불량 접수 등록'}
           </button>
           <button type="button" className="btn btn-ghost" onClick={() => navigate('/supplier-claims')}>취소</button>
         </div>
