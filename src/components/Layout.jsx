@@ -98,24 +98,29 @@ export default function Layout() {
                 공급사 불량
               </div>
               <NavLink to="/supplier-claims" className={({ isActive }) => `nav-item${isActive ? ' active' : ''}`}>
-                <span>🏭</span> 불량 이력
+                <span>📋</span> 불량 목록
               </NavLink>
               <NavLink to="/supplier-claims/new" className={({ isActive }) => `nav-item${isActive ? ' active' : ''}`}>
                 <span>➕</span> 불량 접수
               </NavLink>
-              <NavLink to="/suppliers" className={({ isActive }) => `nav-item${isActive ? ' active' : ''}`}>
-                <span>🏭</span> 공급사 관리
+              <NavLink to="/supplier-analytics" className={({ isActive }) => `nav-item${isActive ? ' active' : ''}`}>
+                <span>📊</span> 누적 분석
               </NavLink>
             </>
           )}
 
-          {/* 공통 */}
+          {/* 기타 */}
           <div style={{ fontSize: 10, color: '#94a3b8', fontWeight: 700, letterSpacing: .8, padding: '10px 14px 4px', textTransform: 'uppercase' }}>
             기타
           </div>
           <NavLink to="/parts" className={({ isActive }) => `nav-item${isActive ? ' active' : ''}`}>
             <span>🔩</span> 품번 관리
           </NavLink>
+          {isAdmin && (
+            <NavLink to="/suppliers" className={({ isActive }) => `nav-item${isActive ? ' active' : ''}`}>
+              <span>🏭</span> 공급사 관리
+            </NavLink>
+          )}
         </nav>
 
         {/* 접속자 현황 (관리자 전용) */}
