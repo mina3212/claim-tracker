@@ -9,6 +9,7 @@ import {
   PRODUCT_TYPES, PRODUCT_CATEGORIES,
   DEFECT_TYPES, INSPECTION_STAGES, IMPROVEMENT_RESULTS,
   DISPOSITION_TYPES, DISPOSITION_COLORS, PURCHASE_DEPTS,
+  CORRECTIVE_ACTION_TYPES, IMPROVEMENT_STATUS_OPTIONS, IMPROVEMENT_STATUS_COLORS,
 } from '../lib/supabase';
 import { usePrintTitle } from '../context/PrintContext';
 import PartSearchModal from '../components/PartSearchModal';
@@ -47,11 +48,15 @@ export default function SupplierClaimDetail() {
   const [saving,         setSaving]         = useState(false);
   const [partSearchOpen, setPartSearchOpen] = useState(false);
 
-  const [impForm,      setImpForm]      = useState({ incoming_lot_no: '', incoming_date: '', quantity: '', defect_quantity: '', is_improved: '확인중', notes: '', handler: '' });
-  const [addingImp,    setAddingImp]    = useState(false);
-  const [savingImp,    setSavingImp]    = useState(false);
-  const [editingImpId, setEditingImpId] = useState(null);
-  const [impEditForm,  setImpEditForm]  = useState({});
+  const [impForm,       setImpForm]       = useState({ incoming_lot_no: '', incoming_date: '', quantity: '', defect_quantity: '', is_improved: '확인중', notes: '', handler: '' });
+  const [addingImp,     setAddingImp]     = useState(false);
+  const [savingImp,     setSavingImp]     = useState(false);
+  const [editingImpId,  setEditingImpId]  = useState(null);
+  const [impEditForm,   setImpEditForm]   = useState({});
+
+  const [editingAction, setEditingAction] = useState(false);
+  const [savingAction,  setSavingAction]  = useState(false);
+  const [actionForm,    setActionForm]    = useState({ improvement_status: '미조치', corrective_action_type: '', corrective_action_detail: '' });
 
   if (loading) return <div className="loading">⏳ 불러오는 중...</div>;
 
@@ -132,6 +137,34 @@ export default function SupplierClaimDetail() {
       toast('수정 실패', err.message, 'error');
     } finally {
       setSaving(false);
+    }
+  };
+
+  const startEditAction = () => {
+    setActionForm({
+      improvement_status:       claim.improvement_status       || '미조치',
+      corrective_action_type:   claim.corrective_action_type   || '',
+      corrective_action_detail: claim.corrective_action_detail || '',
+    });
+    setEditingAction(true);
+  };
+
+  const handleSaveAction = async () => {
+    setSavingAction(true);
+    try {
+      const payload = {
+        improvement_status:       actionForm.improvement_status,
+        corrective_action_type:   actionForm.corrective_action_type   || null,
+        corrective_action_detail: actionForm.corrective_action_detail.trim() || null,
+      };
+      await updateSupplierClaim(id, payload);
+      updateClaimData(id, payload);
+      setEditingAction(false);
+      toast('시정조치 저장 완료', '', 'success');
+    } catch (err) {
+      toast('저장 실패', err.message, 'error');
+    } finally {
+      setSavingAction(false);
     }
   };
 
@@ -419,6 +452,90 @@ export default function SupplierClaimDetail() {
             </div>
             {claim.notes && (
               <div className="form-group form-span-2"><Field label="비고" value={claim.notes} /></div>
+            )}
+          </div>
+        )}
+      </div>
+
+      {/* ── 시정조치 현황 ── */}
+      <div className="card" style={{ marginBottom: 16 }}>
+        <div className="card-header" style={{ marginBottom: editingAction ? 16 : 12 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <span className="card-title" style={{ margin: 0 }}>🔧 시정조치 현황</span>
+            {(() => {
+              const st = claim.improvement_status || '미조치';
+              const ic = IMPROVEMENT_STATUS_COLORS[st];
+              return <span style={{ fontSize: 12, padding: '3px 10px', borderRadius: 99, background: ic.bg, color: ic.text, fontWeight: 700 }}>{st}</span>;
+            })()}
+            {claim.corrective_action_type && !editingAction && (
+              <span style={{ fontSize: 12, padding: '3px 10px', borderRadius: 99, background: '#eff6ff', color: '#1d4ed8', fontWeight: 600 }}>{claim.corrective_action_type}</span>
+            )}
+          </div>
+          {!editingAction && (
+            <button className="btn btn-ghost btn-sm" style={{ fontSize: 12 }} onClick={startEditAction}>✏️ 수정</button>
+          )}
+        </div>
+
+        {editingAction ? (
+          <div>
+            <div style={{ marginBottom: 14 }}>
+              <div style={{ fontSize: 11, color: '#94a3b8', fontWeight: 600, textTransform: 'uppercase', letterSpacing: .5, marginBottom: 8 }}>조치 상태</div>
+              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                {IMPROVEMENT_STATUS_OPTIONS.map(st => {
+                  const ic = IMPROVEMENT_STATUS_COLORS[st];
+                  const active = actionForm.improvement_status === st;
+                  return (
+                    <button key={st} type="button"
+                      onClick={() => setActionForm(p => ({ ...p, improvement_status: st }))}
+                      style={{ padding: '7px 22px', borderRadius: 20, fontSize: 13, fontWeight: 700, cursor: 'pointer', border: '2px solid', fontFamily: 'inherit', background: active ? ic.text : '#fff', color: active ? '#fff' : '#64748b', borderColor: active ? ic.text : '#e2e8f0', transition: '.12s' }}>
+                      {st}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+            <div style={{ marginBottom: 14 }}>
+              <div style={{ fontSize: 11, color: '#94a3b8', fontWeight: 600, textTransform: 'uppercase', letterSpacing: .5, marginBottom: 8 }}>조치 유형</div>
+              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                {CORRECTIVE_ACTION_TYPES.map(t => {
+                  const active = actionForm.corrective_action_type === t;
+                  return (
+                    <button key={t} type="button"
+                      onClick={() => setActionForm(p => ({ ...p, corrective_action_type: p.corrective_action_type === t ? '' : t }))}
+                      style={{ padding: '5px 16px', borderRadius: 20, fontSize: 12, fontWeight: 600, cursor: 'pointer', border: '1.5px solid', fontFamily: 'inherit', background: active ? '#2563eb' : '#fff', color: active ? '#fff' : '#64748b', borderColor: active ? '#2563eb' : '#e2e8f0' }}>
+                      {t}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+            <div style={{ marginBottom: 14 }}>
+              <div style={{ fontSize: 11, color: '#94a3b8', fontWeight: 600, textTransform: 'uppercase', letterSpacing: .5, marginBottom: 6 }}>조치 내용 상세</div>
+              <textarea
+                rows={3}
+                placeholder="예) 공급사에 불량 클레임 통보 및 재발방지 대책 요청 (2024-06-30), 2차 입고분부터 전수검사 실시 예정"
+                value={actionForm.corrective_action_detail}
+                onChange={e => setActionForm(p => ({ ...p, corrective_action_detail: e.target.value }))}
+                style={{ width: '100%', resize: 'vertical', padding: '8px 12px', border: '1px solid #e2e8f0', borderRadius: 8, fontSize: 13, fontFamily: 'inherit', lineHeight: 1.6, boxSizing: 'border-box' }}
+              />
+            </div>
+            <div style={{ display: 'flex', gap: 8 }}>
+              <button className="btn btn-primary btn-sm" onClick={handleSaveAction} disabled={savingAction}>{savingAction ? '저장 중...' : '💾 저장'}</button>
+              <button className="btn btn-ghost btn-sm" onClick={() => setEditingAction(false)}>취소</button>
+            </div>
+          </div>
+        ) : (
+          <div>
+            {claim.corrective_action_detail ? (
+              <div style={{ fontSize: 13, color: '#374151', whiteSpace: 'pre-wrap', lineHeight: 1.7, background: '#f8fafc', borderRadius: 8, padding: '10px 14px', border: '1px solid #e2e8f0' }}>
+                {claim.corrective_action_detail}
+              </div>
+            ) : (
+              <div style={{ fontSize: 13, color: '#94a3b8' }}>
+                {(claim.improvement_status || '미조치') === '미조치'
+                  ? '아직 시정조치가 등록되지 않았습니다. 수정 버튼을 눌러 조치 내용을 입력하세요.'
+                  : '조치 내용 상세가 없습니다.'}
+              </div>
             )}
           </div>
         )}

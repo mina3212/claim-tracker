@@ -3,7 +3,7 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useSupplierClaims } from '../context/SupplierClaimsContext';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
-import { deleteSupplierClaim, DISPOSITION_COLORS } from '../lib/supabase';
+import { deleteSupplierClaim, DISPOSITION_COLORS, IMPROVEMENT_STATUS_COLORS } from '../lib/supabase';
 import { usePrintTitle } from '../context/PrintContext';
 
 export default function SupplierClaimList() {
@@ -14,8 +14,9 @@ export default function SupplierClaimList() {
   const [searchParams, setSearchParams] = useSearchParams();
 
   const [search, setSearch] = useState('');
-  const dispositionFilter = searchParams.get('disposition') || 'all';
-  const supplierFilter    = searchParams.get('supplier')    || 'all';
+  const dispositionFilter   = searchParams.get('disposition')    || 'all';
+  const supplierFilter      = searchParams.get('supplier')       || 'all';
+  const improvementFilter   = searchParams.get('improvement')    || 'all';
 
   const { setPrintTitle } = usePrintTitle();
   useEffect(() => {
@@ -25,8 +26,9 @@ export default function SupplierClaimList() {
     setPrintTitle(`AJW 공급사 불량 목록 ${y}${dp}${sp}`);
   }, [dispositionFilter, supplierFilter, setPrintTitle]);
 
-  const setDispositionFilter = (v) => setSearchParams(prev => { const p = new URLSearchParams(prev); v === 'all' ? p.delete('disposition') : p.set('disposition', v); return p; });
-  const setSupplierFilter    = (v) => setSearchParams(prev => { const p = new URLSearchParams(prev); v === 'all' ? p.delete('supplier')    : p.set('supplier', v);    return p; });
+  const setDispositionFilter  = (v) => setSearchParams(prev => { const p = new URLSearchParams(prev); v === 'all' ? p.delete('disposition') : p.set('disposition', v); return p; });
+  const setSupplierFilter     = (v) => setSearchParams(prev => { const p = new URLSearchParams(prev); v === 'all' ? p.delete('supplier')    : p.set('supplier', v);    return p; });
+  const setImprovementFilter  = (v) => setSearchParams(prev => { const p = new URLSearchParams(prev); v === 'all' ? p.delete('improvement') : p.set('improvement', v); return p; });
 
   const suppliers = useMemo(() => [...new Set(claims.map(c => c.supplier_name).filter(Boolean))].sort(), [claims]);
 
@@ -35,8 +37,9 @@ export default function SupplierClaimList() {
     return claims
       .filter(c => {
         const disp = c.disposition || '미결';
-        if (dispositionFilter !== 'all' && disp !== dispositionFilter) return false;
-        if (supplierFilter    !== 'all' && c.supplier_name !== supplierFilter) return false;
+        if (dispositionFilter  !== 'all' && disp !== dispositionFilter) return false;
+        if (supplierFilter     !== 'all' && c.supplier_name !== supplierFilter) return false;
+        if (improvementFilter  !== 'all' && (c.improvement_status || '미조치') !== improvementFilter) return false;
         if (q) {
           const s = `${c.supplier_name} ${c.part_number} ${c.part_name} ${c.lot_number} ${c.defect_description} ${c.defect_type} ${c.incoming_lot_no}`.toLowerCase();
           if (!s.includes(q)) return false;
@@ -98,8 +101,16 @@ export default function SupplierClaimList() {
             <option value="all">전체 공급사</option>
             {suppliers.map(s => <option key={s} value={s}>{s}</option>)}
           </select>
-          {(dispositionFilter !== 'all' || supplierFilter !== 'all' || search) && (
-            <button className="btn btn-ghost btn-sm" onClick={() => { setDispositionFilter('all'); setSupplierFilter('all'); setSearch(''); }}>✕ 초기화</button>
+          <select
+            value={improvementFilter}
+            onChange={e => setImprovementFilter(e.target.value)}
+            style={{ padding: '7px 10px', borderRadius: 8, border: '1px solid #e2e8f0', fontSize: 13, background: '#fff', color: '#374151' }}
+          >
+            <option value="all">전체 시정조치</option>
+            {['미조치', '진행중', '완료'].map(s => <option key={s} value={s}>{s}</option>)}
+          </select>
+          {(dispositionFilter !== 'all' || supplierFilter !== 'all' || improvementFilter !== 'all' || search) && (
+            <button className="btn btn-ghost btn-sm" onClick={() => { setDispositionFilter('all'); setSupplierFilter('all'); setImprovementFilter('all'); setSearch(''); }}>✕ 초기화</button>
           )}
         </div>
       </div>
@@ -127,6 +138,7 @@ export default function SupplierClaimList() {
                   <th>불량 유형</th>
                   <th style={{ textAlign: 'right' }}>불량/입고</th>
                   <th>처리결과</th>
+                  <th>시정조치</th>
                   <th style={{ textAlign: 'center' }}>📎</th>
                   <th></th>
                 </tr>
@@ -168,6 +180,20 @@ export default function SupplierClaimList() {
                       </td>
                       <td>
                         <span style={{ fontSize: 11, padding: '2px 8px', borderRadius: 99, background: dc.bg, color: dc.text, fontWeight: 600, whiteSpace: 'nowrap' }}>{disp}</span>
+                      </td>
+                      <td>
+                        {(() => {
+                          const st = c.improvement_status || '미조치';
+                          const ic = IMPROVEMENT_STATUS_COLORS[st] || IMPROVEMENT_STATUS_COLORS['미조치'];
+                          return (
+                            <div>
+                              <span style={{ fontSize: 11, padding: '2px 8px', borderRadius: 99, background: ic.bg, color: ic.text, fontWeight: 600, whiteSpace: 'nowrap' }}>{st}</span>
+                              {c.corrective_action_type && (
+                                <div style={{ fontSize: 10, color: '#94a3b8', marginTop: 2, whiteSpace: 'nowrap' }}>{c.corrective_action_type}</div>
+                              )}
+                            </div>
+                          );
+                        })()}
                       </td>
                       <td style={{ textAlign: 'center' }}>
                         {fileClaimIds?.has(c.id) && (
