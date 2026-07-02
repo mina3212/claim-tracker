@@ -7,6 +7,7 @@ import {
 import { useSupplierClaims } from '../context/SupplierClaimsContext';
 import { usePrintTitle } from '../context/PrintContext';
 import { DISPOSITION_COLORS, PRODUCT_CATEGORIES } from '../lib/supabase';
+import { exportToExcel } from '../lib/exportExcel';
 
 const COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#8b5cf6', '#f97316', '#ef4444', '#06b6d4', '#84cc16', '#ec4899', '#64748b'];
 const TABS   = ['공급사별', '품목별', '불량유형별', '품목군별', '처리결과별', '월별 추이'];
@@ -264,7 +265,28 @@ export default function SupplierAnalytics() {
           <div className="page-title">공급사 불량 누적 분석</div>
           <div className="page-sub">공급사·품목·불량유형별 심화 분석</div>
         </div>
-        <button className="btn btn-ghost btn-sm" onClick={() => window.print()}>🖨️ 인쇄</button>
+        <div style={{ display: 'flex', gap: 8 }}>
+          <button className="btn btn-ghost btn-sm" onClick={() => {
+            const today = new Date().toISOString().slice(0, 10).replace(/-/g, '');
+            const rows = filteredClaims.map(c => {
+              const denom = c.inspection_quantity || c.quantity;
+              const rate = denom && c.defect_quantity != null ? ((c.defect_quantity / denom) * 100).toFixed(1) : '';
+              return {
+                '입고일': c.incoming_date || '', '입고차수': c.incoming_lot_no || '',
+                '공급사': c.supplier_name || '', '구매경로': c.purchase_dept || '',
+                '품번': c.part_number || '', '품명': c.part_name || '',
+                '품목군': c.product_category || '', '검사단계': c.inspection_stage || '',
+                '불량유형': c.defect_type || '', '입고수량': c.quantity ?? '',
+                '불량수량': c.defect_quantity ?? '', '불량률(%)': rate,
+                '처리결과': c.disposition || '미결',
+                '시정조치상태': c.improvement_status || '미조치',
+                '조치유형': c.corrective_action_type || '',
+              };
+            });
+            exportToExcel(rows, `AJW_공급사불량_누적분석_${today}.xlsx`, '누적분석');
+          }} disabled={filteredClaims.length === 0}>📥 엑셀 저장</button>
+          <button className="btn btn-ghost btn-sm" onClick={() => window.print()}>🖨️ 인쇄</button>
+        </div>
       </div>
 
       <div className="no-print">

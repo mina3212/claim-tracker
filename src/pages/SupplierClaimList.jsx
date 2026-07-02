@@ -4,6 +4,7 @@ import { useSupplierClaims } from '../context/SupplierClaimsContext';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
 import { deleteSupplierClaim, DISPOSITION_COLORS, IMPROVEMENT_STATUS_COLORS } from '../lib/supabase';
+import { exportToExcel } from '../lib/exportExcel';
 import { usePrintTitle } from '../context/PrintContext';
 
 export default function SupplierClaimList() {
@@ -49,6 +50,34 @@ export default function SupplierClaimList() {
       .sort((a, b) => (b.incoming_date || b.created_at || '') > (a.incoming_date || a.created_at || '') ? 1 : -1);
   }, [claims, search, dispositionFilter, supplierFilter]);
 
+  const handleExport = () => {
+    const today = new Date().toISOString().slice(0, 10).replace(/-/g, '');
+    const rows = filtered.map(c => {
+      const defRate = c.quantity > 0 && c.defect_quantity != null
+        ? ((c.defect_quantity / c.quantity) * 100).toFixed(1) : '';
+      return {
+        '입고일':       c.incoming_date         || '',
+        '입고차수':     c.incoming_lot_no        || '',
+        '공급사':       c.supplier_name          || '',
+        '구매경로':     c.purchase_dept          || '',
+        '품번':         c.part_number            || '',
+        '품명':         c.part_name              || '',
+        '품목군':       c.product_category       || '',
+        '검사단계':     c.inspection_stage       || '',
+        '불량유형':     c.defect_type            || '',
+        '입고수량':     c.quantity               ?? '',
+        '불량수량':     c.defect_quantity        ?? '',
+        '불량률(%)':    defRate,
+        '처리결과':     c.disposition            || '미결',
+        '시정조치상태': c.improvement_status     || '미조치',
+        '조치유형':     c.corrective_action_type || '',
+        '조치내용':     c.corrective_action_detail || '',
+        '비고':         c.notes                  || '',
+      };
+    });
+    exportToExcel(rows, `AJW_공급사불량목록_${today}.xlsx`, '공급사불량');
+  };
+
   const handleDelete = async (e, id, supplierName) => {
     e.stopPropagation();
     if (!confirm(`"${supplierName}" 불량 이력을 삭제하시겠습니까?\n관련 이력도 모두 삭제됩니다.`)) return;
@@ -72,7 +101,10 @@ export default function SupplierClaimList() {
           <div className="page-title">공급사 불량 이력</div>
           <div className="page-sub">총 {claims.length}건 · 현재 {filtered.length}건 표시</div>
         </div>
-        <button className="btn btn-primary" onClick={() => navigate('/supplier-claims/new')}>➕ 불량 접수</button>
+        <div style={{ display: 'flex', gap: 8 }}>
+          <button className="btn btn-ghost btn-sm" onClick={handleExport} disabled={filtered.length === 0}>📥 엑셀 저장</button>
+          <button className="btn btn-primary" onClick={() => navigate('/supplier-claims/new')}>➕ 불량 접수</button>
+        </div>
       </div>
 
       {/* 필터 */}

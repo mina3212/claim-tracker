@@ -4,6 +4,7 @@ import { useClaims } from '../context/ClaimsContext';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
 import { deleteClaim, insertDeleteRequest, STAGES } from '../lib/supabase';
+import { exportToExcel } from '../lib/exportExcel';
 import StageBadge from '../components/StageBadge';
 import DeleteRequestModal from '../components/DeleteRequestModal';
 import { usePrintTitle } from '../context/PrintContext';
@@ -72,6 +73,32 @@ export default function ClaimList() {
     [deleteRequests]
   );
 
+  const handleExport = () => {
+    const today = new Date().toISOString().slice(0, 10).replace(/-/g, '');
+    const rows = filtered.map(c => {
+      const defRate = c.quantity > 0 && c.defect_quantity != null
+        ? ((c.defect_quantity / c.quantity) * 100).toFixed(1) : '';
+      return {
+        '접수일':     c.receipt_date      || '',
+        '발생일':     c.occurrence_date   || '',
+        '고객사그룹': c.customer_group    || '',
+        '고객사명':   c.customer_name     || '',
+        '품번':       c.part_number       || '',
+        '품명':       c.part_name         || '',
+        'LOT번호':    c.lot_number        || '',
+        '출고수량':   c.quantity          ?? '',
+        '불량수량':   c.defect_quantity   ?? '',
+        '불량률(%)':  defRate,
+        '불량내용':   c.defect_description || '',
+        '불량원인':   (causeMap[c.id] || []).join(', '),
+        '현재단계':   c.current_stage     || '',
+        '영업담당부서': c.sales_rep_dept  || '',
+        '영업담당자': c.sales_rep_name    || '',
+      };
+    });
+    exportToExcel(rows, `AJW_클레임목록_${today}.xlsx`, '클레임목록');
+  };
+
   const handleDelete = async (e, id, customerName) => {
     e.stopPropagation();
     if (!confirm(`"${customerName}" 클레임을 삭제하시겠습니까?\n처리 이력도 모두 삭제됩니다.`)) return;
@@ -105,7 +132,10 @@ export default function ClaimList() {
           <div className="page-title">클레임 목록</div>
           <div className="page-sub">총 {claims.length}건 · 검색결과 {filtered.length}건</div>
         </div>
-        {user && <button className="btn btn-primary" onClick={() => navigate('/claims/new')}>➕ 클레임 접수</button>}
+        <div style={{ display: 'flex', gap: 8 }}>
+          <button className="btn btn-ghost btn-sm" onClick={handleExport} disabled={filtered.length === 0}>📥 엑셀 저장</button>
+          {user && <button className="btn btn-primary" onClick={() => navigate('/claims/new')}>➕ 클레임 접수</button>}
+        </div>
       </div>
 
       <div className="filter-bar">

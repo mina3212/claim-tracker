@@ -4,94 +4,230 @@ import { useSupplierClaims } from '../context/SupplierClaimsContext';
 import { usePrintTitle } from '../context/PrintContext';
 import { DISPOSITION_COLORS } from '../lib/supabase';
 
-const GEMINI_KEY = import.meta.env.VITE_GEMINI_API_KEY;
-const GEMINI_URL = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${GEMINI_KEY}`;
-
-function sortedEntries(obj) {
-  return Object.entries(obj).sort((a, b) => b[1] - a[1]);
+function cnt(arr, key) {
+  const m = {};
+  arr.forEach(c => { const k = c[key] || '미분류'; m[k] = (m[k] || 0) + 1; });
+  return Object.entries(m).sort(([,a],[,b]) => b-a);
 }
 
-function buildData(customerClaims, supplierClaims) {
-  /* ── 고객사 클레임 ── */
-  const cByStage = {}, cByGroup = {}, cByDefect = {}, cByProduct = {};
-  let cClosed = 0;
-  customerClaims.forEach(c => {
-    cByStage[c.current_stage || '미분류'] = (cByStage[c.current_stage || '미분류'] || 0) + 1;
-    cByGroup[c.customer_group || '미분류'] = (cByGroup[c.customer_group || '미분류'] || 0) + 1;
-    cByDefect[c.defect_type || '미분류'] = (cByDefect[c.defect_type || '미분류'] || 0) + 1;
-    cByProduct[c.product_category || '미분류'] = (cByProduct[c.product_category || '미분류'] || 0) + 1;
-    if (c.current_stage === '종결') cClosed++;
+function generateLocalReport(filteredC, filteredS, start, end, stages) {
+  const lines = [];
+  const now = new Date().toLocaleDateString('ko-KR');
+
+  /* ── 고객사 클레임 통계 ── */
+  const cTotal   = filteredC.length;
+  const cClosed  = filteredC.filter(c => c.current_stage === '종결').length;
+  const cPending = cTotal - cClosed;
+  const closeRate = cTotal > 0 ? ((cClosed / cTotal) * 100).toFixed(1) : '0';
+
+  const cByStage   = cnt(filteredC, 'current_stage');
+  const cByGroup   = cnt(filteredC, 'customer_group');
+  const cByCustomer = cnt(filteredC, 'customer_name');
+  const cByDefect  = cnt(filteredC, 'defect_type');
+  const cByProduct = cnt(filteredC, 'product_category');
+
+  // 원인 분석 (stages에서 파싱)
+  const causeCount = {};
+  const claimIdSet = new Set(filteredC.map(c => c.id));
+  (stages || []).forEach(s => {
+    if (s.stage_name !== '회수품 원인분석' || !claimIdSet.has(s.claim_id)) return;
+    const m = (s.description || '').match(/\[원인\]\s*(.+)/);
+    if (!m) return;
+    m[1].split(',').map(x => x.trim()).forEach(cause => {
+      causeCount[cause] = (causeCount[cause] || 0) + 1;
+    });
   });
+  const cByCause = Object.entries(causeCount).sort(([,a],[,b]) => b-a);
 
-  /* ── 공급사 불량 ── */
-  const sByDisp = {}, sBySupplier = {}, sByDefect = {}, sByInspection = {};
-  let totalIn = 0, totalDef = 0;
-  supplierClaims.forEach(c => {
-    const disp = c.disposition || '미결';
-    sByDisp[disp] = (sByDisp[disp] || 0) + 1;
-    sBySupplier[c.supplier_name] = (sBySupplier[c.supplier_name] || 0) + (c.defect_quantity || 0);
-    sByDefect[c.defect_type || '미분류'] = (sByDefect[c.defect_type || '미분류'] || 0) + 1;
-    sByInspection[c.inspection_stage || '미분류'] = (sByInspection[c.inspection_stage || '미분류'] || 0) + 1;
-    totalIn  += (c.quantity         || 0);
-    totalDef += (c.defect_quantity   || 0);
-  });
+  /* ── 공급사 불량 통계 ── */
+  const sTotal   = filteredS.length;
+  const totalIn  = filteredS.reduce((s, c) => s + (c.quantity || 0), 0);
+  const totalDef = filteredS.reduce((s, c) => s + (c.defect_quantity || 0), 0);
+  const defRate  = totalIn > 0 ? ((totalDef / totalIn) * 100).toFixed(2) : '0';
 
-  return {
-    고객사클레임: {
-      총건수: customerClaims.length,
-      종결건수: cClosed,
-      미결건수: customerClaims.length - cClosed,
-      종결률: customerClaims.length > 0 ? ((cClosed / customerClaims.length) * 100).toFixed(1) + '%' : '0%',
-      단계별현황: Object.fromEntries(sortedEntries(cByStage)),
-      고객사그룹별: Object.fromEntries(sortedEntries(cByGroup).slice(0, 5)),
-      불량유형별: Object.fromEntries(sortedEntries(cByDefect).slice(0, 5)),
-      품목군별: Object.fromEntries(sortedEntries(cByProduct).slice(0, 5)),
-    },
-    공급사불량: {
-      총건수: supplierClaims.length,
-      총입고수량: totalIn,
-      총불량수량: totalDef,
-      전체불량률: totalIn > 0 ? ((totalDef / totalIn) * 100).toFixed(2) + '%' : '0%',
-      처리결과별: Object.fromEntries(sortedEntries(sByDisp)),
-      공급사별불량수량: Object.fromEntries(sortedEntries(sBySupplier).slice(0, 5)),
-      불량유형별: Object.fromEntries(sortedEntries(sByDefect).slice(0, 5)),
-      검사단계별: Object.fromEntries(sortedEntries(sByInspection)),
-    },
-  };
-}
+  const sBySupplier = cnt(filteredS, 'supplier_name');
+  const sByDefect   = cnt(filteredS, 'defect_type');
+  const sByDisp     = cnt(filteredS, 'disposition');
+  const sByStage    = cnt(filteredS, 'inspection_stage');
 
-function buildPrompt(data, start, end) {
-  return `당신은 AJW(에이제이월드) 광통신 부품 회사의 품질 분석 전문가입니다.
-AJW는 광커넥터, 광점퍼코드, 광분배함, 광접속함체 등 광통신 부품을 제조·유통합니다.
+  const sNoAction = filteredS.filter(c => !c.improvement_status || c.improvement_status === '미조치').length;
+  const sInProgress = filteredS.filter(c => c.improvement_status === '진행중').length;
+  const sDone = filteredS.filter(c => c.improvement_status === '완료').length;
 
-아래 ${start} ~ ${end} 기간의 데이터를 분석하여 클레임 종합 분석 보고서를 한국어로 작성하세요.
+  /* ── 보고서 작성 ── */
+  lines.push(`# AJW 클레임 종합 분석 보고서`);
+  lines.push(`## 분석 기간: ${start} ~ ${end}  ·  작성일: ${now}`);
+  lines.push('');
+  lines.push('---');
+  lines.push('');
 
-**데이터:**
-${JSON.stringify(data, null, 2)}
+  /* 핵심 요약 */
+  lines.push('## 📌 핵심 요약');
+  lines.push('');
+  if (cTotal > 0) {
+    lines.push(`- 분석 기간 고객사 클레임 **${cTotal}건** 접수 · 종결 **${cClosed}건** (종결률 **${closeRate}%**) · 미결 **${cPending}건**`);
+    if (parseFloat(closeRate) < 50 && cTotal >= 3)
+      lines.push(`  - ⚠️ 종결률이 50% 미만입니다. 미결 클레임 ${cPending}건에 대한 신속한 처리가 필요합니다.`);
+  } else {
+    lines.push('- 해당 기간 고객사 클레임 데이터 없음');
+  }
+  if (sTotal > 0) {
+    lines.push(`- 공급사 불량 **${sTotal}건** · 총 입고 **${totalIn.toLocaleString()}EA** 중 불량 **${totalDef.toLocaleString()}EA** (전체 불량률 **${defRate}%**)`);
+    if (parseFloat(defRate) > 5)
+      lines.push(`  - ⚠️ 전체 불량률이 5%를 초과했습니다. 즉각적인 원인 분석과 공급사 대응이 필요합니다.`);
+    if (sNoAction > 0)
+      lines.push(`  - ⚠️ 시정조치 미완료 **${sNoAction + sInProgress}건** (미조치 ${sNoAction}건 · 진행중 ${sInProgress}건)`);
+  } else {
+    lines.push('- 해당 기간 공급사 불량 데이터 없음');
+  }
+  if (cTotal === 0 && sTotal === 0) {
+    lines.push('');
+    lines.push('> 선택한 기간에 분석할 데이터가 없습니다.');
+    return lines.join('\n');
+  }
+  lines.push('');
 
-**보고서 형식 (마크다운):**
+  /* ── 고객사 클레임 현황 ── */
+  if (cTotal > 0) {
+    lines.push('---');
+    lines.push('');
+    lines.push('## 🏢 고객사 클레임 현황');
+    lines.push('');
 
-# ${start} ~ ${end} 클레임 종합 분석 보고서
+    lines.push('### 단계별 현황');
+    cByStage.forEach(([stage, n]) => {
+      const bar = '█'.repeat(Math.round(n / cTotal * 20));
+      lines.push(`- **${stage}**: ${n}건 (${(n/cTotal*100).toFixed(0)}%) ${bar}`);
+    });
+    lines.push('');
 
-## 핵심 요약
-핵심 수치 및 전체 현황을 3~4문장으로 요약. 가장 중요한 인사이트를 먼저 언급.
+    if (cByGroup.length > 0) {
+      lines.push('### 고객사 그룹별');
+      cByGroup.slice(0, 5).forEach(([g, n]) => lines.push(`- ${g}: ${n}건`));
+      lines.push('');
+    }
 
-## 고객사 클레임 현황
-건수, 종결률, 주요 고객사 그룹, 주요 불량 유형을 분석. 미결 클레임이 많으면 원인 추정.
+    if (cByCustomer.length > 0) {
+      lines.push('### 주요 고객사 TOP 5');
+      cByCustomer.slice(0, 5).forEach(([name, n], i) =>
+        lines.push(`${i + 1}. **${name}**: ${n}건 (${(n/cTotal*100).toFixed(0)}%)`));
+      lines.push('');
+    }
 
-## 공급사 불량 현황
-건수, 전체 불량률, 문제 공급사 TOP3, 주요 불량 유형, 처리결과 분포 분석.
+    if (cByDefect.length > 0) {
+      lines.push('### 불량 유형');
+      cByDefect.slice(0, 6).forEach(([t, n]) => lines.push(`- ${t}: ${n}건`));
+      lines.push('');
+    }
 
-## 주요 문제점 및 패턴
-데이터에서 발견되는 반복 패턴, 집중 영역, 심각도 높은 사항 지적. 수치 근거 포함.
+    if (cByProduct.length > 0) {
+      lines.push('### 품목군별');
+      cByProduct.slice(0, 5).forEach(([p, n]) => lines.push(`- ${p}: ${n}건`));
+      lines.push('');
+    }
 
-## 개선 권고사항
-구체적이고 실행 가능한 개선 방안 3~5가지. 각 항목에 담당 부서나 조치 방향 포함.
+    if (cByCause.length > 0) {
+      lines.push('### 원인 분석 결과');
+      cByCause.forEach(([cause, n]) => lines.push(`- ${cause}: ${n}건`));
+      lines.push('');
+    }
+  }
 
-**작성 기준:**
-- 데이터가 0건인 경우 "해당 기간 데이터 없음"으로 간략 처리
-- 수치 기반 객관적 분석 위주, 추측 최소화
-- 전문적이고 간결하게 (A4 2~3페이지 분량)`;
+  /* ── 공급사 불량 현황 ── */
+  if (sTotal > 0) {
+    lines.push('---');
+    lines.push('');
+    lines.push('## 🏭 공급사 불량 현황');
+    lines.push('');
+    lines.push(`- 총 발생: **${sTotal}건**  ·  입고 **${totalIn.toLocaleString()}EA**  ·  불량 **${totalDef.toLocaleString()}EA**  ·  불량률 **${defRate}%**`);
+    lines.push('');
+
+    lines.push('### 처리결과 현황');
+    const dispWithDefault = sByDisp.length > 0 ? sByDisp : [['미결', sTotal]];
+    dispWithDefault.forEach(([d, n]) => lines.push(`- **${d || '미결'}**: ${n}건`));
+    lines.push('');
+
+    lines.push('### 시정조치 현황');
+    lines.push(`- 미조치: **${sNoAction}건**`);
+    lines.push(`- 진행중: **${sInProgress}건**`);
+    lines.push(`- 완료:   **${sDone}건**`);
+    lines.push('');
+
+    if (sBySupplier.length > 0) {
+      lines.push('### 불량 공급사 TOP 5');
+      sBySupplier.slice(0, 5).forEach(([name, n], i) =>
+        lines.push(`${i + 1}. **${name}**: ${n}건 (${(n/sTotal*100).toFixed(0)}%)`));
+      lines.push('');
+    }
+
+    if (sByDefect.length > 0) {
+      lines.push('### 불량 유형별');
+      sByDefect.slice(0, 6).forEach(([t, n]) => lines.push(`- ${t}: ${n}건`));
+      lines.push('');
+    }
+
+    if (sByStage.length > 0) {
+      lines.push('### 검사 단계별');
+      sByStage.forEach(([s, n]) => lines.push(`- ${s}: ${n}건`));
+      lines.push('');
+    }
+  }
+
+  /* ── 주요 이슈 ── */
+  lines.push('---');
+  lines.push('');
+  lines.push('## ⚠️ 주요 이슈 및 패턴');
+  lines.push('');
+
+  const issues = [];
+  if (cTotal > 0 && parseFloat(closeRate) < 60 && cPending >= 2)
+    issues.push(`고객사 클레임 종결률 **${closeRate}%** — 미결 **${cPending}건**이 장기 체류 중입니다. 단계별 병목 원인을 점검하세요.`);
+  if (cByCustomer.length > 0 && cByCustomer[0][1] / cTotal >= 0.3)
+    issues.push(`**${cByCustomer[0][0]}** 단일 고객사 집중: 전체의 ${(cByCustomer[0][1]/cTotal*100).toFixed(0)}% (${cByCustomer[0][1]}건). 해당 고객사와의 품질 협의 필요.`);
+  if (cByCause.length > 0 && cByCause[0][1] >= 2)
+    issues.push(`반복 발생 원인 **${cByCause[0][0]}** (${cByCause[0][1]}건) — 재발방지 대책의 실효성 점검 필요.`);
+  if (sTotal > 0 && parseFloat(defRate) > 3)
+    issues.push(`공급사 전체 불량률 **${defRate}%** — 허용 기준(3%) 초과. 수입검사 강화 또는 공급사 평가 재검토가 필요합니다.`);
+  if (sBySupplier.length > 0 && sBySupplier[0][1] / sTotal >= 0.4)
+    issues.push(`**${sBySupplier[0][0]}** 단일 공급사 집중: 전체의 ${(sBySupplier[0][1]/sTotal*100).toFixed(0)}% (${sBySupplier[0][1]}건). 해당 공급사에 대한 집중 관리 필요.`);
+  if (sNoAction >= 3)
+    issues.push(`시정조치 미등록 **${sNoAction}건** — 불량 발생 후 조치가 취해지지 않은 건이 다수입니다. 즉시 담당자를 지정해 조치 계획을 수립하세요.`);
+
+  if (issues.length === 0) {
+    lines.push('- 분석 기간 내 특별한 집중 이슈가 발견되지 않았습니다.');
+  } else {
+    issues.forEach(iss => lines.push(`- ${iss}`));
+  }
+  lines.push('');
+
+  /* ── 개선 권고사항 ── */
+  lines.push('---');
+  lines.push('');
+  lines.push('## 💡 개선 권고사항');
+  lines.push('');
+
+  const recs = [];
+  if (cPending > 0)
+    recs.push(`**[품질기술팀·영업팀]** 미결 클레임 ${cPending}건 진행 현황을 일괄 점검하고, 30일 이상 지연된 건은 조기 종결 조치를 취하세요.`);
+  if (cByCause.length > 0)
+    recs.push(`**[품질기술팀]** 주요 원인 "${cByCause[0][0]}" 재발방지 대책의 현장 적용 여부를 확인하고, 개선 효과를 수치로 측정할 기준을 마련하세요.`);
+  if (sBySupplier.length > 0)
+    recs.push(`**[구매/SCM팀]** 불량 상위 공급사(${sBySupplier.slice(0, 2).map(([n]) => n).join(', ')})에 대해 공식 클레임 통보 및 시정조치 요구서를 발행하고 다음 입고 시 전수검사를 실시하세요.`);
+  if (sNoAction >= 2)
+    recs.push(`**[품질기술팀]** 시정조치 미등록 ${sNoAction}건에 대해 조치 유형(공급사 클레임·작업자 교육·공정 변경 등)을 등록하고 완료 일정을 수립하세요.`);
+  if (parseFloat(defRate) > 3)
+    recs.push(`**[구매/SCM팀·품질기술팀]** 공급사 정기 품질 평가 주기를 단축하고, 불량률 기준(예: 3% 초과 시 경고, 5% 초과 시 거래 재검토) 관리 기준을 내규화하세요.`);
+
+  if (recs.length === 0)
+    recs.push('데이터가 충분하지 않아 구체적 권고사항을 도출하기 어렵습니다. 더 많은 데이터가 누적된 후 재분석을 권장합니다.');
+
+  recs.forEach((r, i) => lines.push(`${i + 1}. ${r}`));
+  lines.push('');
+  lines.push('---');
+  lines.push('');
+  lines.push(`> *본 보고서는 ${start} ~ ${end} 기간의 데이터를 기반으로 자동 생성되었습니다. 고객사 클레임 ${cTotal}건 + 공급사 불량 ${sTotal}건 분석.*`);
+
+  return lines.join('\n');
 }
 
 /* ── 마크다운 → HTML 변환 ── */
@@ -144,7 +280,7 @@ function topEntries(items, key, n = 5) {
 }
 
 export default function AnalysisReport({ embedded = false }) {
-  const { claims }   = useClaims();
+  const { claims, stages }   = useClaims();
   const { claims: supplierClaims } = useSupplierClaims();
   const { setPrintTitle } = usePrintTitle();
 
@@ -186,73 +322,35 @@ export default function AnalysisReport({ embedded = false }) {
     return { cClosed, cPending, sPending, sDone, totalIn, totalDef, defRate, topCustomers, topCDefects, topSuppliers, topSDefects, dispositions };
   }, [filteredC, filteredS]);
 
-  const generate = async () => {
-    if (!GEMINI_KEY) {
-      setError('VITE_GEMINI_API_KEY 환경변수가 없습니다. 아래 안내를 확인하세요.');
-      return;
-    }
-    if (total === 0) {
-      setError('선택한 기간에 데이터가 없습니다.');
-      return;
-    }
+  const generate = () => {
+    if (total === 0) { setError('선택한 기간에 데이터가 없습니다.'); return; }
     setGenerating(true);
     setError('');
     setReport('');
     setPrintTitle(`AJW 클레임 종합 분석 보고서 (${start} ~ ${end})`);
-    try {
-      const data   = buildData(filteredC, filteredS);
-      const prompt = buildPrompt(data, start, end);
-      const res = await fetch(GEMINI_URL, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          contents: [{ parts: [{ text: prompt }] }],
-          generationConfig: { temperature: 0.2, maxOutputTokens: 4096 },
-        }),
-      });
-      if (!res.ok) {
-        const errData = await res.json().catch(() => ({}));
-        throw new Error(errData.error?.message || `HTTP ${res.status}`);
+    setTimeout(() => {
+      try {
+        const text = generateLocalReport(filteredC, filteredS, start, end, stages);
+        setReport(text);
+      } catch (err) {
+        setError(`생성 실패: ${err.message}`);
+      } finally {
+        setGenerating(false);
       }
-      const json = await res.json();
-      const text = json.candidates?.[0]?.content?.parts?.[0]?.text || '';
-      if (!text) throw new Error('응답이 비어 있습니다.');
-      setReport(text);
-    } catch (err) {
-      setError(`생성 실패: ${err.message}`);
-    } finally {
-      setGenerating(false);
-    }
+    }, 200);
   };
-
-  const noKey = !GEMINI_KEY;
 
   return (
     <div>
       {!embedded && (
         <div className="page-header">
           <div>
-            <div className="page-title">🤖 AI 클레임 분석 보고서</div>
+            <div className="page-title">📊 클레임 종합 분석 보고서</div>
             <div className="page-sub">기간을 선택하면 고객사 클레임 + 공급사 불량을 종합 분석합니다</div>
           </div>
           {report && (
             <button className="btn btn-ghost btn-sm no-print" onClick={() => window.print()}>🖨️ 인쇄/PDF</button>
           )}
-        </div>
-      )}
-
-      {/* API 키 미설정 안내 */}
-      {noKey && (
-        <div style={{ background: '#fef9c3', border: '1px solid #fde047', borderRadius: 10, padding: '14px 18px', marginBottom: 16 }}>
-          <div style={{ fontWeight: 700, fontSize: 14, color: '#713f12', marginBottom: 8 }}>⚠️ Gemini API 키 설정 필요</div>
-          <div style={{ fontSize: 13, color: '#78350f', lineHeight: 1.7 }}>
-            1. <a href="https://aistudio.google.com/app/apikey" target="_blank" rel="noreferrer" style={{ color: '#1d4ed8', fontWeight: 600 }}>Google AI Studio</a>에서 무료 API 키 발급<br />
-            2. 프로젝트 루트의 <code style={{ background: '#fef08a', padding: '1px 5px', borderRadius: 3 }}>.env</code> 파일에 추가:
-            <div style={{ fontFamily: 'monospace', background: '#1e293b', color: '#7dd3fc', padding: '8px 12px', borderRadius: 6, marginTop: 6, fontSize: 12 }}>
-              VITE_GEMINI_API_KEY=여기에_키_붙여넣기
-            </div>
-            3. 개발 서버 재시작 후 사용 가능 · Vercel 환경변수에도 동일하게 추가
-          </div>
         </div>
       )}
 
@@ -282,15 +380,10 @@ export default function AnalysisReport({ embedded = false }) {
           <button
             className="btn btn-primary"
             onClick={generate}
-            disabled={generating || noKey}
-            style={{ marginLeft: 'auto', background: generating ? '#93c5fd' : undefined, minWidth: 140 }}
+            disabled={generating}
+            style={{ marginLeft: 'auto', minWidth: 140 }}
           >
-            {generating ? (
-              <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                <span style={{ display: 'inline-block', width: 14, height: 14, border: '2px solid rgba(255,255,255,.4)', borderTopColor: '#fff', borderRadius: '50%', animation: 'spin .7s linear infinite' }} />
-                분석 중...
-              </span>
-            ) : '🤖 보고서 생성'}
+            {generating ? '⏳ 생성 중...' : '📊 보고서 생성'}
           </button>
         </div>
 
@@ -412,10 +505,9 @@ export default function AnalysisReport({ embedded = false }) {
       {/* 생성 중 */}
       {generating && (
         <div className="card" style={{ textAlign: 'center', padding: '48px 24px', marginBottom: 16 }}>
-          <div style={{ fontSize: 40, marginBottom: 16 }}>🤖</div>
-          <div style={{ fontSize: 15, fontWeight: 700, color: '#0f172a', marginBottom: 8 }}>AI가 데이터를 분석하고 있습니다</div>
+          <div style={{ fontSize: 40, marginBottom: 16 }}>📊</div>
+          <div style={{ fontSize: 15, fontWeight: 700, color: '#0f172a', marginBottom: 8 }}>데이터를 분석하고 있습니다</div>
           <div style={{ fontSize: 13, color: '#94a3b8' }}>고객사 클레임 {filteredC.length}건 + 공급사 불량 {filteredS.length}건 종합 분석 중...</div>
-          <style>{`@keyframes spin{to{transform:rotate(360deg)}}`}</style>
         </div>
       )}
 
@@ -428,7 +520,7 @@ export default function AnalysisReport({ embedded = false }) {
           />
           <div style={{ marginTop: 32, paddingTop: 16, borderTop: '1px solid #e2e8f0', fontSize: 11, color: '#cbd5e1', display: 'flex', justifyContent: 'space-between' }}>
             <span>분석 기간: {start} ~ {end} · 고객사 {filteredC.length}건 + 공급사 {filteredS.length}건</span>
-            <span>AI 생성 보고서 (Google Gemini) · 참고용으로만 활용하세요</span>
+            <span>자동 생성 보고서 · AJW 클레임 트래커</span>
           </div>
         </div>
       )}
