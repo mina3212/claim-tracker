@@ -53,26 +53,29 @@ export default function SupplierClaimList() {
   const handleExport = () => {
     const today = new Date().toISOString().slice(0, 10).replace(/-/g, '');
     const rows = filtered.map(c => {
-      const defRate = c.quantity > 0 && c.defect_quantity != null
-        ? ((c.defect_quantity / c.quantity) * 100).toFixed(1) : '';
+      const denom   = c.inspection_quantity ?? c.quantity;
+      const defRate = denom > 0 && c.defect_quantity != null
+        ? ((c.defect_quantity / denom) * 100).toFixed(1) : '';
       return {
-        '입고일':       c.incoming_date         || '',
-        '입고차수':     c.incoming_lot_no        || '',
-        '공급사':       c.supplier_name          || '',
-        '구매경로':     c.purchase_dept          || '',
-        '품번':         c.part_number            || '',
-        '품명':         c.part_name              || '',
-        '품목군':       c.product_category       || '',
-        '검사단계':     c.inspection_stage       || '',
-        '불량유형':     c.defect_type            || '',
-        '입고수량':     c.quantity               ?? '',
-        '불량수량':     c.defect_quantity        ?? '',
+        '입고일':       c.incoming_date              || '',
+        '입고차수':     c.incoming_lot_no             || '',
+        '공급사':       c.supplier_name               || '',
+        '구매경로':     c.purchase_dept               || '',
+        '품번':         c.part_number                 || '',
+        '품명':         c.part_name                   || '',
+        '품목군':       c.product_category            || '',
+        '검사단계':     c.inspection_stage            || '',
+        '불량유형':     c.defect_type                 || '',
+        '불량내용':     c.defect_description          || '',
+        '입고수량':     c.quantity                    ?? '',
+        '검사수량':     c.inspection_quantity         ?? '',
+        '불량수량':     c.defect_quantity             ?? '',
         '불량률(%)':    defRate,
-        '처리결과':     c.disposition            || '미결',
-        '시정조치상태': c.improvement_status     || '미조치',
-        '조치유형':     c.corrective_action_type || '',
-        '조치내용':     c.corrective_action_detail || '',
-        '비고':         c.notes                  || '',
+        '처리결과':     c.disposition                 || '미결',
+        '시정조치상태': c.improvement_status          || '미조치',
+        '조치유형':     c.corrective_action_type      || '',
+        '조치내용':     c.corrective_action_detail    || '',
+        '비고':         c.notes                       || '',
       };
     });
     exportToExcel(rows, `AJW_공급사불량목록_${today}.xlsx`, '공급사불량');
@@ -179,8 +182,9 @@ export default function SupplierClaimList() {
                 {filtered.map(c => {
                   const disp = c.disposition || '미결';
                   const dc   = DISPOSITION_COLORS[disp] || DISPOSITION_COLORS['미결'];
-                  const defRate = c.quantity > 0 && c.defect_quantity != null
-                    ? ((c.defect_quantity / c.quantity) * 100).toFixed(1) : null;
+                  const denom   = c.inspection_quantity ?? c.quantity;
+                  const defRate = denom > 0 && c.defect_quantity != null
+                    ? ((c.defect_quantity / denom) * 100).toFixed(1) : null;
                   return (
                     <tr key={c.id} className="clickable" onClick={() => navigate(`/supplier-claims/${c.id}`)}>
                       <td style={{ whiteSpace: 'nowrap' }}>

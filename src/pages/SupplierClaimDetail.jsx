@@ -89,7 +89,8 @@ export default function SupplierClaimDetail() {
       handler_name:       claim.handler_name       || '',
       part_number:        claim.part_number        || '',
       part_name:          claim.part_name          || '',
-      quantity:           claim.quantity    != null ? String(claim.quantity)          : '',
+      quantity:             claim.quantity             != null ? String(claim.quantity)             : '',
+      inspection_quantity:  claim.inspection_quantity  != null ? String(claim.inspection_quantity)  : '',
       product_type:       claim.product_type       || '',
       product_category:   claim.product_category   || '',
       inspection_stage:   claim.inspection_stage   || '',
@@ -117,7 +118,8 @@ export default function SupplierClaimDetail() {
         handler_name:       editForm.handler_name.trim()     || null,
         part_number:        editForm.part_number.trim()      || null,
         part_name:          editForm.part_name.trim()        || null,
-        quantity:           editForm.quantity          !== '' ? parseInt(editForm.quantity)          : null,
+        quantity:             editForm.quantity             !== '' ? parseInt(editForm.quantity)             : null,
+        inspection_quantity:  editForm.inspection_quantity  !== '' ? parseInt(editForm.inspection_quantity)  : null,
         product_type:       editForm.product_type       || null,
         product_category:   editForm.product_category   || null,
         inspection_stage:   editForm.inspection_stage   || null,
@@ -223,11 +225,15 @@ export default function SupplierClaimDetail() {
   const toggle = (key, val) => setEditForm(prev => ({ ...prev, [key]: prev[key] === val ? '' : val }));
 
   const qty     = claim.quantity;
+  const insQty  = claim.inspection_quantity;
   const defQty  = claim.defect_quantity;
-  const defRate = qty > 0 && defQty != null ? ((defQty / qty) * 100).toFixed(1) : null;
-  const eqty    = editForm ? parseFloat(editForm.quantity)        : 0;
-  const edefQty = editForm ? parseFloat(editForm.defect_quantity) : 0;
-  const edefRate = eqty > 0 && edefQty >= 0 ? ((edefQty / eqty) * 100).toFixed(1) : null;
+  const defDenom = insQty ?? qty;
+  const defRate  = defDenom > 0 && defQty != null ? ((defQty / defDenom) * 100).toFixed(1) : null;
+  const eqty     = editForm ? parseFloat(editForm.quantity)             : 0;
+  const eInsQty  = editForm ? parseFloat(editForm.inspection_quantity)  : NaN;
+  const edefQty  = editForm ? parseFloat(editForm.defect_quantity)      : 0;
+  const eDenom   = (!isNaN(eInsQty) && eInsQty > 0) ? eInsQty : eqty;
+  const edefRate = eDenom > 0 && edefQty >= 0 ? ((edefQty / eDenom) * 100).toFixed(1) : null;
 
   return (
     <div>
@@ -317,6 +323,10 @@ export default function SupplierClaimDetail() {
               <div className="form-group">
                 <label>입고 수량 (EA)</label>
                 <input type="number" min="0" value={editForm.quantity} onChange={setEF('quantity')} />
+              </div>
+              <div className="form-group">
+                <label>검사 수량 (EA)</label>
+                <input type="number" min="0" value={editForm.inspection_quantity} onChange={setEF('inspection_quantity')} placeholder="미입력시 입고수량 기준" />
               </div>
               <div className="form-group">
                 <label>불량 수량 (EA)</label>
@@ -430,10 +440,14 @@ export default function SupplierClaimDetail() {
               <div style={{ fontSize: 13 }}>{qty != null ? qty.toLocaleString() + ' EA' : '—'}</div>
             </div>
             <div className="form-group">
+              <div style={{ fontSize: 11, color: '#94a3b8', fontWeight: 600, textTransform: 'uppercase', letterSpacing: .5, marginBottom: 3 }}>검사 수량</div>
+              <div style={{ fontSize: 13 }}>{insQty != null ? insQty.toLocaleString() + ' EA' : <span style={{ color: '#cbd5e1' }}>—</span>}</div>
+            </div>
+            <div className="form-group">
               <div style={{ fontSize: 11, color: '#94a3b8', fontWeight: 600, textTransform: 'uppercase', letterSpacing: .5, marginBottom: 3 }}>불량 수량 / 불량률</div>
               <div style={{ fontSize: 13, fontWeight: 700, color: defRate !== null ? (parseFloat(defRate) > 5 ? '#dc2626' : '#059669') : '#0f172a' }}>
                 {defQty != null ? defQty.toLocaleString() + ' EA' : '—'}
-                {defRate !== null && <span style={{ fontWeight: 400, color: '#64748b', marginLeft: 6 }}>({defRate}%)</span>}
+                {defRate !== null && <span style={{ fontWeight: 400, color: '#64748b', marginLeft: 6 }}>({defRate}%{insQty != null ? ' 검사기준' : ''})</span>}
               </div>
             </div>
             <div className="form-group form-span-2">
