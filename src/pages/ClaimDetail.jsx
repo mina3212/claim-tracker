@@ -125,9 +125,12 @@ export default function ClaimDetail() {
   /* ── 이미지 업로드 상태 ── */
   const [causes,   setCauses]   = useState([{ text: '', files: [] }]); // 회수품원인분析 다중원인
   const [advFiles, setAdvFiles] = useState([]); // 기타 단계 첨부 이미지
-  const advFileRef     = useRef(null); // 파일 input ref (조치/기타)
-  const causeFileRef   = useRef(null); // 파일 input ref (원인분析 per-cause)
-  const causeFileIdx   = useRef(0);    // 현재 파일 추가 중인 원인 인덱스
+  const advFileRef          = useRef(null);
+  const causeFileRef        = useRef(null);
+  const causeFileIdx        = useRef(0);
+  const entryEditFileRef    = useRef(null);
+  const entryEditCauseRef   = useRef(null);
+  const entryEditCauseIdx   = useRef(0);
 
   /* ── 프로필 로드 후 담당자/부서 자동세팅 ── */
   useEffect(() => {
@@ -452,7 +455,6 @@ export default function ClaimDetail() {
           onChange={e => {
             const files = Array.from(e.target.files || []);
             if (files.length > 0) setAdvFiles(prev => [...prev, ...files]);
-            if (advFileRef.current) advFileRef.current.value = '';
           }}
         />
         <input ref={causeFileRef} type="file" accept="image/*" multiple style={{ display: 'none' }}
@@ -460,7 +462,6 @@ export default function ClaimDetail() {
             const files = Array.from(e.target.files || []);
             const idx = causeFileIdx.current;
             if (files.length > 0) setCauses(prev => prev.map((c, i) => i === idx ? { ...c, files: [...c.files, ...files] } : c));
-            if (causeFileRef.current) causeFileRef.current.value = '';
           }}
         />
         <div style={{ fontSize: 13, fontWeight: 600, color: '#0f172a', marginBottom: 12 }}>
@@ -662,7 +663,6 @@ export default function ClaimDetail() {
                 onChange={e => {
                   const files = Array.from(e.target.files || []);
                   if (files.length > 0) setAdvFiles(prev => [...prev, ...files]);
-                  if (advFileRef.current) advFileRef.current.value = '';
                 }}
               />
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, alignItems: 'center' }}>
@@ -1248,6 +1248,13 @@ export default function ClaimDetail() {
                         {entryEditMode === 'cause' ? (
                           <div style={{ marginBottom: 10 }}>
                             <label style={{ fontSize: 11, fontWeight: 600, display: 'block', marginBottom: 6 }}>원인별 상세 내용</label>
+                            <input ref={entryEditCauseRef} type="file" accept="image/*" multiple style={{ display: 'none' }}
+                              onChange={e => {
+                                const files = Array.from(e.target.files || []);
+                                const i2 = entryEditCauseIdx.current;
+                                if (files.length > 0) setEntryEditCauses(p => p.map((c, i) => i === i2 ? { ...c, newFiles: [...(c.newFiles||[]), ...files] } : c));
+                              }}
+                            />
                             {entryEditCauses.map((item, idx) => (
                               <div key={idx} style={{ border: '1px solid #e2e8f0', borderRadius: 8, padding: 10, marginBottom: 8, background: '#fff' }}>
                                 <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6 }}>
@@ -1275,22 +1282,16 @@ export default function ClaimDetail() {
                                     ))}
                                   </div>
                                 )}
-                                <div>
-                                  <label style={{ fontSize: 10, color: '#64748b' }}>사진 추가 (선택)</label>
-                                  <input type="file" accept="image/*" multiple
-                                    onChange={e => { const files = Array.from(e.target.files || []); setEntryEditCauses(p => p.map((c, i) => i === idx ? { ...c, newFiles: [...(c.newFiles||[]), ...files] } : c)); e.target.value = ''; }}
-                                    style={{ fontSize: 11, display: 'block', marginTop: 2 }}
-                                  />
-                                  {item.newFiles && item.newFiles.length > 0 && (
-                                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginTop: 4 }}>
-                                      {item.newFiles.map((f, fi) => (
-                                        <span key={fi} style={{ fontSize: 10, background: '#eff6ff', borderRadius: 4, padding: '1px 6px' }}>📷 {f.name}
-                                          <button type="button" onClick={() => setEntryEditCauses(p => p.map((c, i) => i === idx ? { ...c, newFiles: c.newFiles.filter((_, j) => j !== fi) } : c))}
-                                            style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#94a3b8', marginLeft: 2 }}>✕</button>
-                                        </span>
-                                      ))}
-                                    </div>
-                                  )}
+                                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, alignItems: 'center', marginTop: 4 }}>
+                                  <button type="button"
+                                    onClick={() => { entryEditCauseIdx.current = idx; entryEditCauseRef.current?.click(); }}
+                                    style={{ fontSize: 10, padding: '3px 8px', borderRadius: 6, border: '1px solid #e2e8f0', background: '#f8fafc', color: '#475569', cursor: 'pointer' }}>📷 사진 추가</button>
+                                  {item.newFiles && item.newFiles.map((f, fi) => (
+                                    <span key={fi} style={{ fontSize: 10, background: '#eff6ff', borderRadius: 4, padding: '1px 6px' }}>📷 {f.name}
+                                      <button type="button" onClick={() => setEntryEditCauses(p => p.map((c, i) => i === idx ? { ...c, newFiles: c.newFiles.filter((_, j) => j !== fi) } : c))}
+                                        style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#94a3b8', marginLeft: 2 }}>✕</button>
+                                    </span>
+                                  ))}
                                 </div>
                               </div>
                             ))}
@@ -1307,20 +1308,19 @@ export default function ClaimDetail() {
                             />
                             <div style={{ marginTop: 8 }}>
                               <label style={{ fontSize: 11, color: '#64748b' }}>사진 첨부 <span style={{ fontSize: 10, color: '#94a3b8' }}>(선택)</span></label>
-                              <input type="file" accept="image/*" multiple
-                                onChange={e => { setEntryEditFiles(prev => [...prev, ...Array.from(e.target.files || [])]); e.target.value = ''; }}
-                                style={{ fontSize: 11, display: 'block', marginTop: 2 }}
+                              <input ref={entryEditFileRef} type="file" accept="image/*" multiple style={{ display: 'none' }}
+                                onChange={e => { const files = Array.from(e.target.files || []); if (files.length > 0) setEntryEditFiles(prev => [...prev, ...files]); }}
                               />
-                              {entryEditFiles.length > 0 && (
-                                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginTop: 4 }}>
-                                  {entryEditFiles.map((f, i) => (
-                                    <span key={i} style={{ fontSize: 10, background: '#eff6ff', borderRadius: 4, padding: '1px 6px' }}>📷 {f.name}
-                                      <button type="button" onClick={() => setEntryEditFiles(p => p.filter((_, j) => j !== i))}
-                                        style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#94a3b8', marginLeft: 2 }}>✕</button>
-                                    </span>
-                                  ))}
-                                </div>
-                              )}
+                              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginTop: 4, alignItems: 'center' }}>
+                                <button type="button" onClick={() => entryEditFileRef.current?.click()}
+                                  style={{ fontSize: 11, padding: '4px 10px', borderRadius: 8, border: '1px solid #e2e8f0', background: '#f8fafc', color: '#475569', cursor: 'pointer' }}>📷 사진 선택</button>
+                                {entryEditFiles.map((f, i) => (
+                                  <span key={i} style={{ fontSize: 10, background: '#eff6ff', borderRadius: 4, padding: '1px 6px' }}>📷 {f.name}
+                                    <button type="button" onClick={() => setEntryEditFiles(p => p.filter((_, j) => j !== i))}
+                                      style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#94a3b8', marginLeft: 2 }}>✕</button>
+                                  </span>
+                                ))}
+                              </div>
                             </div>
                           </div>
                         )}
