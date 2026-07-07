@@ -28,7 +28,7 @@ export const SUPPLIER_STAGE_COLORS = {
 
 export const CUSTOMER_GROUPS     = ['KT', 'LG', 'SK', '해외고객사', '온라인몰', '기타'];
 export const PRODUCT_TYPES       = ['수입부품', '수입완제품', '내수부품', '내수완제품', '자체제작상품'];
-export const PRODUCT_CATEGORIES  = ['광분배함류', '광접속함체류', '광커넥터류', '광점퍼코드류', '동자재', '기타'];
+export const PRODUCT_CATEGORIES  = ['광분배함류', '광단자함류', '광접속함체류', '광커넥터류', '광점퍼코드류', '동자재', '기타'];
 export const DEPARTMENTS         = ['영업팀', '마케팅팀', '품질기술팀', '영업관리팀', 'SCM팀'];
 export const SALES_DEPTS         = ['영업팀', '마케팅팀', '영업관리팀', 'SCM팀'];
 export const SALES_REPS          = ['권해인', '김정선', '김한나', '김희수', '송현진', '양태양', '최유선', '최윤환'];
