@@ -98,39 +98,32 @@ export default function ClaimReport() {
             </div>
           </div>
 
-          {/* 결재란 — 참고 양식 스타일 */}
-          <table style={{ borderCollapse: 'collapse', flexShrink: 0 }}>
-            <tbody>
-              <tr>
-                <td rowSpan={3} style={{
-                  border: '1px solid #94a3b8', width: 18,
-                  writingMode: 'vertical-rl', textOrientation: 'upright',
-                  textAlign: 'center', fontWeight: 800, fontSize: 11,
-                  letterSpacing: 2, background: '#f1f5f9', padding: '4px 2px',
-                }}>결재</td>
-                {APPROVERS.map(r => (
-                  <td key={r} style={{
-                    border: '1px solid #94a3b8', width: 56, padding: '3px 4px',
-                    textAlign: 'center', fontWeight: 700, fontSize: 10,
-                    background: '#f1f5f9',
-                  }}>{r}</td>
-                ))}
-              </tr>
-              <tr>
-                {APPROVERS.map(r => (
-                  <td key={r} style={{ border: '1px solid #94a3b8', height: 46, width: 56 }} />
-                ))}
-              </tr>
-              <tr>
-                {APPROVERS.map(r => (
-                  <td key={r} style={{
-                    border: '1px solid #94a3b8', height: 16, width: 56,
-                    fontSize: 8.5, color: '#94a3b8', textAlign: 'center', verticalAlign: 'middle',
-                  }}></td>
-                ))}
-              </tr>
-            </tbody>
-          </table>
+          {/* 결재란 */}
+          <div style={{ flexShrink: 0 }}>
+            <table style={{ borderCollapse: 'collapse' }}>
+              <tbody>
+                <tr>
+                  {APPROVERS.map(r => (
+                    <td key={r} style={{
+                      border: '1px solid #94a3b8', width: 54, padding: '3px 0',
+                      textAlign: 'center', fontWeight: 700, fontSize: 10,
+                      background: '#f1f5f9',
+                    }}>{r}</td>
+                  ))}
+                </tr>
+                <tr>
+                  {APPROVERS.map(r => (
+                    <td key={r} style={{ border: '1px solid #94a3b8', height: 50, width: 54 }} />
+                  ))}
+                </tr>
+                <tr>
+                  {APPROVERS.map(r => (
+                    <td key={r} style={{ border: '1px solid #94a3b8', height: 14, width: 54 }} />
+                  ))}
+                </tr>
+              </tbody>
+            </table>
+          </div>
         </div>
 
         {/* 1. 기본 정보 */}
