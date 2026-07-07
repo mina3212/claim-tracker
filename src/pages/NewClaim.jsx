@@ -279,9 +279,9 @@ export default function NewClaim() {
               <label>품목 유형 <span className="required-star">*</span></label>
               <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
                 {PRODUCT_TYPES.map(t => {
-                  const tips = { '수입품': '해외 수입 품목', '자체제작상품': 'AJW, SCON, AJP 직접생산품', '내수품': '국내 구매 품목' };
+                  const tips = { '수입부품': '해외에서 수입한 부품', '수입완제품': '해외에서 수입한 완제품', '내수부품': '국내 구매 부품', '내수완제품': '국내 구매 완제품' };
                   return (
-                    <Tooltip key={t} text={tips[t]}>
+                    <Tooltip key={t} text={tips[t] || ''}>
                       <button
                         type="button"
                         onClick={() => setForm(prev => ({ ...prev, product_type: prev.product_type === t ? '' : t }))}
