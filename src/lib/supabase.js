@@ -30,6 +30,7 @@ export const CUSTOMER_GROUPS     = ['KT', 'LG', 'SK', '해외고객사', '온라
 export const PRODUCT_TYPES       = ['수입부품', '수입완제품', '내수부품', '내수완제품'];
 export const PRODUCT_CATEGORIES  = ['광분배함류', '광접속함체류', '광커넥터류', '광점퍼코드류', '동자재', '기타'];
 export const DEPARTMENTS         = ['영업팀', '마케팅팀', '품질기술팀', '영업관리팀'];
+export const SALES_REPS          = ['권해인', '김정선', '김한나', '김희수', '송현진', '양태양', '최유선', '최윤환'];
 export const DEFECT_TYPES        = ['치수불량', '외관불량', '조립불량', '기능불량', '포장불량', '수량부족', '기타'];
 export const RETURN_STATUSES     = ['미결', '반품', '교환', '폐기'];
 export const INSPECTION_STAGES   = ['부품 수입검사', '완제품 입고검사', '출하검사'];

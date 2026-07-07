@@ -3,7 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { useClaims } from '../context/ClaimsContext';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
-import { advanceClaim, deleteClaim, updateClaim, updateStageEntry, insertDeleteRequest, resolveDeleteRequest, fetchNotifyEmails, STAGES, STAGE_ICONS, STAGE_COLORS, CUSTOMER_GROUPS, PRODUCT_TYPES, PRODUCT_CATEGORIES, DEPARTMENTS } from '../lib/supabase';
+import { advanceClaim, deleteClaim, updateClaim, updateStageEntry, insertDeleteRequest, resolveDeleteRequest, fetchNotifyEmails, STAGES, STAGE_ICONS, STAGE_COLORS, CUSTOMER_GROUPS, PRODUCT_TYPES, PRODUCT_CATEGORIES, DEPARTMENTS, SALES_REPS } from '../lib/supabase';
 import { usePrintTitle } from '../context/PrintContext';
 import Tooltip from '../components/Tooltip';
 import StageTracker from '../components/StageTracker';
@@ -360,12 +360,14 @@ export default function ClaimDetail() {
           </div>
           <div className="form-group">
             <label>담당자 이름 <span className="required-star">*</span></label>
-            <input
-              placeholder="이름 입력"
+            <select
               value={advHandler}
               onChange={e => setAdvHandler(e.target.value)}
-              style={{ borderColor: !advHandler.trim() ? '#fca5a5' : undefined }}
-            />
+              style={{ borderColor: !advHandler ? '#fca5a5' : undefined }}
+            >
+              <option value="">담당자 선택</option>
+              {SALES_REPS.map(n => <option key={n} value={n}>{n}</option>)}
+            </select>
           </div>
         </div>
 

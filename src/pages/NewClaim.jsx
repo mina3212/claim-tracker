@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useClaims } from '../context/ClaimsContext';
 import { useToast } from '../context/ToastContext';
-import { insertClaim, CUSTOMER_GROUPS, PRODUCT_TYPES, PRODUCT_CATEGORIES, DEPARTMENTS } from '../lib/supabase';
+import { insertClaim, CUSTOMER_GROUPS, PRODUCT_TYPES, PRODUCT_CATEGORIES, DEPARTMENTS, SALES_REPS } from '../lib/supabase';
 import PartSearchModal from '../components/PartSearchModal';
 import CustomerSearchModal from '../components/CustomerSearchModal';
 import Tooltip from '../components/Tooltip';
@@ -171,7 +171,10 @@ export default function NewClaim() {
             </div>
             <div className="form-group">
               <label>영업담당자 <span className="required-star">*</span></label>
-              <input placeholder="이름" value={form.sales_rep_name} onChange={set('sales_rep_name')} required />
+              <select value={form.sales_rep_name} onChange={set('sales_rep_name')} required>
+                <option value="">담당자 선택</option>
+                {SALES_REPS.map(n => <option key={n} value={n}>{n}</option>)}
+              </select>
             </div>
             <div className="form-group">
               <label>담당자 연락처 <span className="required-star">*</span></label>
