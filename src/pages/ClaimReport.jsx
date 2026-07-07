@@ -99,19 +99,19 @@ export default function ClaimReport() {
           </div>
 
           {/* 결재란 */}
-          <table style={{ borderCollapse: 'collapse', fontSize: 11 }}>
+          <table style={{ borderCollapse: 'collapse', fontSize: 10 }}>
             <thead>
               <tr>
                 <td colSpan={APPROVERS.length} style={{
-                  border: '1px solid #94a3b8', padding: '3px 0', textAlign: 'center',
-                  fontWeight: 800, background: '#e2e8f0', fontSize: 11, letterSpacing: 4,
-                }}>결&nbsp;&nbsp;&nbsp;재</td>
+                  border: '1px solid #94a3b8', padding: '2px 0', textAlign: 'center',
+                  fontWeight: 800, background: '#e2e8f0', fontSize: 10, letterSpacing: 3,
+                }}>결&nbsp;&nbsp;재</td>
               </tr>
               <tr>
                 {APPROVERS.map(r => (
                   <td key={r} style={{
-                    border: '1px solid #94a3b8', padding: '3px 0', textAlign: 'center',
-                    fontWeight: 700, fontSize: 10, background: '#f8fafc', width: 54,
+                    border: '1px solid #94a3b8', padding: '2px 0', textAlign: 'center',
+                    fontWeight: 700, fontSize: 9.5, background: '#f8fafc', width: 40,
                   }}>{r}</td>
                 ))}
               </tr>
@@ -119,7 +119,7 @@ export default function ClaimReport() {
             <tbody>
               <tr>
                 {APPROVERS.map(r => (
-                  <td key={r} style={{ border: '1px solid #94a3b8', height: 58, width: 54 }} />
+                  <td key={r} style={{ border: '1px solid #94a3b8', height: 40, width: 40 }} />
                 ))}
               </tr>
             </tbody>
