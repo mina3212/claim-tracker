@@ -220,7 +220,7 @@ export default function ClaimDetail() {
       const uploadAll = async (files) => {
         const urls = [];
         for (const f of files) {
-          try { urls.push(await uploadStageImage(f, id)); } catch { /* 업로드 실패시 무시 */ }
+          urls.push(await uploadStageImage(f, id));
         }
         return urls;
       };
