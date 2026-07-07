@@ -1,4 +1,30 @@
 import { useState, useMemo, useEffect } from 'react';
+
+const DOT_STYLE = {
+  new:      { color: '#ef4444', pulse: true,  title: '신규 접수' },
+  progress: { color: '#f59e0b', pulse: false, title: '진행중' },
+  done:     { color: '#10b981', pulse: false, title: '종결' },
+};
+
+function StatusDot({ status }) {
+  const d = DOT_STYLE[status] || DOT_STYLE.progress;
+  return (
+    <>
+      <style>{`
+        @keyframes dot-pulse {
+          0%, 100% { transform: scale(1);   opacity: 1; }
+          50%       { transform: scale(1.7); opacity: .5; }
+        }
+      `}</style>
+      <span title={d.title} style={{
+        display: 'inline-block', width: 9, height: 9, borderRadius: '50%',
+        background: d.color,
+        animation: d.pulse ? 'dot-pulse 1.4s ease-in-out infinite' : 'none',
+        flexShrink: 0,
+      }} />
+    </>
+  );
+}
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useClaims } from '../context/ClaimsContext';
 import { useAuth } from '../context/AuthContext';
@@ -185,6 +211,7 @@ export default function ClaimList() {
             <table>
               <thead>
                 <tr>
+                  <th style={{ width: 28 }}></th>
                   <th>접수일</th>
                   <th>고객사</th>
                   <th>품번</th>
@@ -199,8 +226,15 @@ export default function ClaimList() {
                 </tr>
               </thead>
               <tbody>
-                {filtered.map(c => (
+                {filtered.map(c => {
+                  const stage = c.current_stage;
+                  const dotStatus = stage === '종결' ? 'done'
+                    : stage === '접수' ? 'new' : 'progress';
+                  return (
                   <tr key={c.id} className="clickable" onClick={() => navigate(`/claims/${c.id}`)}>
+                    <td style={{ textAlign: 'center', paddingRight: 0 }}>
+                      <StatusDot status={dotStatus} />
+                    </td>
                     <td style={{ whiteSpace: 'nowrap' }}>{c.receipt_date || '-'}</td>
                     <td>
                       <strong>{c.customer_name}</strong>
@@ -252,7 +286,8 @@ export default function ClaimList() {
                       </td>
                     )}
                   </tr>
-                ))}
+                  );
+                })}
               </tbody>
             </table>
           </div>
