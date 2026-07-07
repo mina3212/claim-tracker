@@ -216,15 +216,10 @@ export default function NewSupplierClaim() {
             <div className="form-group" />
             <div className="form-group">
               <label>검사자</label>
-              <input
-                list="inspectors-list"
-                placeholder="검사 담당자 이름"
-                value={form.handler_name}
-                onChange={set('handler_name')}
-              />
-              <datalist id="inspectors-list">
-                {INSPECTORS.map(n => <option key={n} value={n} />)}
-              </datalist>
+              <select value={form.handler_name} onChange={set('handler_name')}>
+                <option value="">검사자 선택</option>
+                {INSPECTORS.map(n => <option key={n} value={n}>{n}</option>)}
+              </select>
             </div>
 
           </div>

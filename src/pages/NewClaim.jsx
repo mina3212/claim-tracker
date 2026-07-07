@@ -203,16 +203,10 @@ export default function NewClaim() {
             </div>
             <div className="form-group">
               <label>영업담당자 <span className="required-star">*</span></label>
-              <input
-                list="sales-reps-list"
-                placeholder="이름 입력 또는 선택"
-                value={form.sales_rep_name}
-                onChange={set('sales_rep_name')}
-                required
-              />
-              <datalist id="sales-reps-list">
-                {SALES_REPS.map(n => <option key={n} value={n} />)}
-              </datalist>
+              <select value={form.sales_rep_name} onChange={set('sales_rep_name')} required>
+                <option value="">담당자 선택</option>
+                {SALES_REPS.map(n => <option key={n} value={n}>{n}</option>)}
+              </select>
             </div>
           </div>
         </div>
