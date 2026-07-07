@@ -5,17 +5,39 @@ import { STAGE_COLORS } from '../lib/supabase';
 
 function parseDesc(desc) {
   if (!desc) return { type: 'plain', text: '' };
+
+  // New multi-cause JSON format
+  if (desc.includes('[상세JSON]')) {
+    const lines = desc.split('\n');
+    const cause = (lines.find(l => l.startsWith('[원인]')) || '').replace('[원인] ', '');
+    const jsonLine = lines.find(l => l.startsWith('[상세JSON]')) || '';
+    let causesArr = [];
+    try { causesArr = JSON.parse(jsonLine.replace('[상세JSON] ', '')); } catch {}
+    return { type: 'causeJson', cause, causesArr };
+  }
+
   if (desc.startsWith('[원인]')) {
     const lines = desc.split('\n');
-    const cause  = lines.find(l => l.startsWith('[원인]'))?.replace('[원인] ', '') || '';
-    const detail = lines.find(l => l.startsWith('[상세]'))?.replace('[상세] ', '') || '';
+    const cause  = (lines.find(l => l.startsWith('[원인]')) || '').replace('[원인] ', '');
+    const detail = (lines.find(l => l.startsWith('[상세]')) || '').replace('[상세] ', '');
     return { type: 'cause', cause, detail };
   }
   if (desc.startsWith('[조치내용]')) {
     const lines   = desc.split('\n');
-    const action  = lines.find(l => l.startsWith('[조치내용]'))?.replace('[조치내용] ', '') || '';
-    const prevent = lines.find(l => l.startsWith('[재발방지]'))?.replace('[재발방지] ', '') || '';
-    return { type: 'action', action, prevent };
+    const action  = (lines.find(l => l.startsWith('[조치내용]')) || '').replace('[조치내용] ', '');
+    const prevent = (lines.find(l => l.startsWith('[재발방지]')) || '').replace('[재발방지] ', '');
+    const imgsLine = lines.find(l => l.startsWith('[imgs]')) || '';
+    let imgs = [];
+    try { if (imgsLine) imgs = JSON.parse(imgsLine.replace('[imgs] ', '')); } catch {}
+    return { type: 'action', action, prevent, imgs };
+  }
+  if (desc.includes('[imgs]')) {
+    const lines = desc.split('\n');
+    const imgsLine = lines.find(l => l.startsWith('[imgs]')) || '';
+    const text = lines.filter(l => !l.startsWith('[imgs]')).join('\n');
+    let imgs = [];
+    try { if (imgsLine) imgs = JSON.parse(imgsLine.replace('[imgs] ', '')); } catch {}
+    return { type: 'withImgs', text, imgs };
   }
   return { type: 'plain', text: desc };
 }
@@ -195,9 +217,52 @@ export default function ClaimReport() {
             {history.map((entry, i) => {
               const sc = STAGE_COLORS[entry.stage_name] || { bg: '#f1f5f9', text: '#374151' };
               const parsed = parseDesc(entry.description);
-              let descText = parsed.text;
-              if (parsed.type === 'cause')  descText = `[원인] ${parsed.cause}\n[상세] ${parsed.detail}`;
-              if (parsed.type === 'action') descText = `[조치] ${parsed.action}\n[재발방지] ${parsed.prevent}`;
+              const DescCell = () => {
+                if (parsed.type === 'causeJson') return (
+                  <div>
+                    {parsed.cause && <div>[원인] {parsed.cause}</div>}
+                    {parsed.causesArr.map((c, ci) => (
+                      <div key={ci} style={{ marginTop: 4, borderLeft: '2px solid #93c5fd', paddingLeft: 6 }}>
+                        <div style={{ fontWeight: 600, fontSize: 10 }}>{ci+1}번째 원인</div>
+                        <div style={{ whiteSpace: 'pre-wrap' }}>{c.text}</div>
+                        {c.imgs && c.imgs.length > 0 && (
+                          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginTop: 4 }}>
+                            {c.imgs.map((url, ui) => (
+                              <img key={ui} src={url} alt="" style={{ width: 60, height: 60, objectFit: 'cover', borderRadius: 4, border: '1px solid #e2e8f0' }} />
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                );
+                if (parsed.type === 'cause')  return <div style={{ whiteSpace: 'pre-wrap' }}>[원인] {parsed.cause}{parsed.detail ? '\n[상세] ' + parsed.detail : ''}</div>;
+                if (parsed.type === 'action') return (
+                  <div>
+                    <div style={{ whiteSpace: 'pre-wrap' }}>[조치] {parsed.action}{parsed.prevent ? '\n[재발방지] ' + parsed.prevent : ''}</div>
+                    {parsed.imgs && parsed.imgs.length > 0 && (
+                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginTop: 4 }}>
+                        {parsed.imgs.map((url, ui) => (
+                          <img key={ui} src={url} alt="" style={{ width: 60, height: 60, objectFit: 'cover', borderRadius: 4, border: '1px solid #e2e8f0' }} />
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                );
+                if (parsed.type === 'withImgs') return (
+                  <div>
+                    <div style={{ whiteSpace: 'pre-wrap' }}>{parsed.text}</div>
+                    {parsed.imgs.length > 0 && (
+                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginTop: 4 }}>
+                        {parsed.imgs.map((url, ui) => (
+                          <img key={ui} src={url} alt="" style={{ width: 60, height: 60, objectFit: 'cover', borderRadius: 4, border: '1px solid #e2e8f0' }} />
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                );
+                return <div style={{ whiteSpace: 'pre-wrap' }}>{parsed.text || '-'}</div>;
+              };
               return (
                 <tr key={entry.id || i} style={{ background: i % 2 === 0 ? '#fff' : '#f8fafc' }}>
                   <td className="rpt-td-val" style={{ whiteSpace: 'nowrap' }}>
@@ -208,7 +273,7 @@ export default function ClaimReport() {
                   <td className="rpt-td-val" style={{ whiteSpace: 'nowrap' }}>{entry.stage_date || '-'}</td>
                   <td className="rpt-td-val" style={{ whiteSpace: 'nowrap' }}>{entry.handler_dept || '-'}</td>
                   <td className="rpt-td-val" style={{ whiteSpace: 'nowrap' }}>{entry.handler || entry.user_name || entry.user_email || '-'}</td>
-                  <td className="rpt-td-val" style={{ whiteSpace: 'pre-wrap', lineHeight: 1.4 }}>{descText || '-'}</td>
+                  <td className="rpt-td-val" style={{ lineHeight: 1.4 }}><DescCell /></td>
                 </tr>
               );
             })}
@@ -225,7 +290,26 @@ export default function ClaimReport() {
             </tr>
             <tr>
               <td className="rpt-td-lbl" style={{ verticalAlign: 'top' }}>원인 상세</td>
-              <td className="rpt-td-val" style={{ whiteSpace: 'pre-wrap', lineHeight: 1.5 }}>{causeParsed?.detail || '-'}</td>
+              <td className="rpt-td-val" style={{ lineHeight: 1.5 }}>
+                {causeParsed?.type === 'causeJson' ? (
+                  causeParsed.causesArr.length === 0 ? '-' :
+                  causeParsed.causesArr.map((c, i) => (
+                    <div key={i} style={{ marginBottom: 8, borderLeft: '2px solid #93c5fd', paddingLeft: 8 }}>
+                      <div style={{ fontWeight: 700, fontSize: 10, color: '#1e40af', marginBottom: 2 }}>{i+1}번째 원인</div>
+                      <div style={{ whiteSpace: 'pre-wrap' }}>{c.text}</div>
+                      {c.imgs && c.imgs.length > 0 && (
+                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginTop: 4 }}>
+                          {c.imgs.map((url, ui) => (
+                            <img key={ui} src={url} alt="" style={{ width: 80, height: 80, objectFit: 'cover', borderRadius: 4, border: '1px solid #e2e8f0' }} />
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  ))
+                ) : (
+                  <span style={{ whiteSpace: 'pre-wrap' }}>{causeParsed?.detail || '-'}</span>
+                )}
+              </td>
             </tr>
             <tr>
               <td className="rpt-td-lbl" style={{ verticalAlign: 'top' }}>조치 내용</td>

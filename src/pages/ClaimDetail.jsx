@@ -1,9 +1,9 @@
-import { useState, useEffect } from 'react';
+﻿import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useClaims } from '../context/ClaimsContext';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
-import { advanceClaim, deleteClaim, updateClaim, updateStageEntry, insertDeleteRequest, resolveDeleteRequest, fetchNotifyEmails, STAGES, STAGE_ICONS, STAGE_COLORS, CUSTOMER_GROUPS, PRODUCT_TYPES, PRODUCT_CATEGORIES, DEPARTMENTS, SALES_REPS } from '../lib/supabase';
+import { advanceClaim, deleteClaim, updateClaim, updateStageEntry, insertDeleteRequest, resolveDeleteRequest, fetchNotifyEmails, uploadStageImage, STAGES, STAGE_ICONS, STAGE_COLORS, CUSTOMER_GROUPS, PRODUCT_TYPES, PRODUCT_CATEGORIES, DEPARTMENTS, SALES_REPS } from '../lib/supabase';
 import { usePrintTitle } from '../context/PrintContext';
 import Tooltip from '../components/Tooltip';
 import StageTracker from '../components/StageTracker';
@@ -12,6 +12,7 @@ import PartSearchModal from '../components/PartSearchModal';
 import DeleteRequestModal from '../components/DeleteRequestModal';
 
 const CAUSES = ['사용자 과실', '생산공정', '제품불량', '구조불량', '배송오류', '기타'];
+const INSPECTORS = ['권순규', '김민아', '민영재', '오은세', '윤창준', '최용민'];
 
 function parseDefect(desc) {
   if (!desc) return { symptom: '', situation: '', request: '', legacy: false };
@@ -111,10 +112,18 @@ export default function ClaimDetail() {
   /* ── 회수품 원인분석 전용 상태 ── */
   const [selectedCauses,   setSelectedCauses]   = useState([]);
   const [etcDetail,        setEtcDetail]        = useState('');
-  const [analysisDetail,   setAnalysisDetail]   = useState('');
-
   /* ── 조치 단계 전용 상태 ── */
   const [preventionMeasure, setPreventionMeasure] = useState('');
+
+  /* ── 이미지 업로드 상태 ── */
+  const [causes,   setCauses]   = useState([{ text: '', files: [] }]); // 회수품원인분析 다중원인
+  const [advFiles, setAdvFiles] = useState([]); // 기타 단계 첨부 이미지
+
+  /* ── 프로필 로드 후 담당자/부서 자동세팅 ── */
+  useEffect(() => {
+    setAdvHandlerDept(prev => prev || department || '');
+    setAdvHandler(prev => prev || displayName || '');
+  }, [department, displayName]);
 
   /* ── 수정 모드 상태 ── */
   const [editMode, setEditMode]             = useState(false);
@@ -188,8 +197,8 @@ export default function ClaimDetail() {
         toast('입력 필요', '기타 원인의 구체적인 내용을 입력하세요', 'error');
         return;
       }
-      if (!analysisDetail.trim()) {
-        toast('입력 필요', '상세 내용은 필수 입력 항목입니다', 'error');
+      if (causes.some(c => !c.text.trim())) {
+        toast('입력 필요', '모든 원인의 상세 내용을 입력하세요', 'error');
         return;
       }
     }
@@ -208,15 +217,30 @@ export default function ClaimDetail() {
 
     setAdvancing(true);
     try {
+      const uploadAll = async (files) => {
+        const urls = [];
+        for (const f of files) {
+          try { urls.push(await uploadStageImage(f, id)); } catch { /* 업로드 실패시 무시 */ }
+        }
+        return urls;
+      };
+
       let description = advDesc;
-      if (claim.current_stage === '회수품 원인분석') {
+      if (claim.current_stage === '회수품 원인분析') {
         const causeStr = selectedCauses
           .map(c => c === '기타' ? `기타(${etcDetail.trim()})` : c)
           .join(', ');
-        description = `[원인] ${causeStr}\n[상세] ${analysisDetail.trim()}`;
-      }
-      if (claim.current_stage === '조치') {
+        const causesWithImgs = await Promise.all(
+          causes.map(async (c) => ({ text: c.text.trim(), imgs: await uploadAll(c.files) }))
+        );
+        description = `[원인] ${causeStr}\n[상세JSON] ${JSON.stringify(causesWithImgs)}`;
+      } else if (claim.current_stage === '조치') {
+        const imgs = await uploadAll(advFiles);
         description = `[조치내용] ${advDesc.trim()}\n[재발방지] ${preventionMeasure.trim()}`;
+        if (imgs.length > 0) description += `\n[imgs] ${JSON.stringify(imgs)}`;
+      } else {
+        const imgs = await uploadAll(advFiles);
+        if (imgs.length > 0) description = `${advDesc}\n[imgs] ${JSON.stringify(imgs)}`;
       }
 
       const { nextStage: ns, entry } = await advanceClaim(
@@ -230,7 +254,8 @@ export default function ClaimDetail() {
       setAdvHandlerDept(department || '');
       setSelectedCauses([]);
       setEtcDetail('');
-      setAnalysisDetail('');
+      setCauses([{ text: '', files: [] }]);
+      setAdvFiles([]);
       setPreventionMeasure('');
       toast(`"${ns}"으로 진행 완료`, '', 'success');
     } catch (err) {
@@ -396,14 +421,19 @@ export default function ClaimDetail() {
           </div>
           <div className="form-group">
             <label>담당자 이름 <span className="required-star">*</span></label>
-            <select
+            <input
+              list={isCauseAnalysis ? 'adv-inspectors' : 'adv-salesreps'}
+              placeholder="담당자 이름"
               value={advHandler}
               onChange={e => setAdvHandler(e.target.value)}
               style={{ borderColor: !advHandler ? '#fca5a5' : undefined }}
-            >
-              <option value="">담당자 선택</option>
-              {SALES_REPS.map(n => <option key={n} value={n}>{n}</option>)}
-            </select>
+            />
+            <datalist id="adv-inspectors">
+              {INSPECTORS.map(n => <option key={n} value={n} />)}
+            </datalist>
+            <datalist id="adv-salesreps">
+              {SALES_REPS.map(n => <option key={n} value={n} />)}
+            </datalist>
           </div>
         </div>
 
@@ -463,21 +493,86 @@ export default function ClaimDetail() {
               </div>
             )}
 
-            {/* 상세 내용 (필수) */}
-            <div className="form-group" style={{ marginBottom: 12 }}>
-              <label>
-                상세 내용 <span className="required-star">*</span>
+            {/* 원인별 상세 내용 + 사진 (복수) */}
+            <div style={{ marginBottom: 12 }}>
+              <label style={{ display: 'block', marginBottom: 8, fontWeight: 600 }}>
+                원인별 상세 내용 <span className="required-star">*</span>
               </label>
-              <textarea
-                rows={4}
-                placeholder="원인 분석 결과를 상세하게 작성하세요 (필수)"
-                value={analysisDetail}
-                onChange={e => setAnalysisDetail(e.target.value)}
+              {causes.map((item, idx) => (
+                <div key={idx} style={{
+                  border: '1px solid #e2e8f0', borderRadius: 8, padding: 12,
+                  marginBottom: 10, background: '#f8fafc',
+                }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+                    <span style={{
+                      background: '#dbeafe', color: '#1e40af', fontWeight: 700,
+                      fontSize: 11, padding: '2px 8px', borderRadius: 12,
+                    }}>{idx + 1}번째 원인</span>
+                    {causes.length > 1 && (
+                      <button
+                        type="button"
+                        onClick={() => setCauses(prev => prev.filter((_, i) => i !== idx))}
+                        style={{
+                          marginLeft: 'auto', fontSize: 11, color: '#ef4444',
+                          background: 'none', border: 'none', cursor: 'pointer', padding: '2px 6px',
+                        }}
+                      >✕ 삭제</button>
+                    )}
+                  </div>
+                  <textarea
+                    rows={3}
+                    placeholder={`${idx + 1}번째 원인 분석 내용을 입력하세요`}
+                    value={item.text}
+                    onChange={e => setCauses(prev => prev.map((c, i) => i === idx ? { ...c, text: e.target.value } : c))}
+                    style={{
+                      resize: 'vertical', width: '100%', marginBottom: 8,
+                      borderColor: item.text.trim() ? '#e2e8f0' : '#fca5a5',
+                    }}
+                  />
+                  <div>
+                    <label style={{ fontSize: 11, color: '#64748b', marginBottom: 4, display: 'block' }}>
+                      사진 첨부 (선택)
+                    </label>
+                    <input
+                      type="file"
+                      accept="image/*"
+                      multiple
+                      onChange={e => {
+                        const files = Array.from(e.target.files || []);
+                        setCauses(prev => prev.map((c, i) => i === idx ? { ...c, files: [...c.files, ...files] } : c));
+                        e.target.value = '';
+                      }}
+                      style={{ fontSize: 12 }}
+                    />
+                    {item.files.length > 0 && (
+                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 6 }}>
+                        {item.files.map((f, fi) => (
+                          <div key={fi} style={{
+                            display: 'flex', alignItems: 'center', gap: 4,
+                            background: '#eff6ff', borderRadius: 6, padding: '2px 8px', fontSize: 11,
+                          }}>
+                            <span>📷 {f.name}</span>
+                            <button
+                              type="button"
+                              onClick={() => setCauses(prev => prev.map((c, i) => i === idx ? { ...c, files: c.files.filter((_, fi2) => fi2 !== fi) } : c))}
+                              style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#94a3b8', padding: 0, lineHeight: 1 }}
+                            >✕</button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              ))}
+              <button
+                type="button"
+                onClick={() => setCauses(prev => [...prev, { text: '', files: [] }])}
                 style={{
-                  resize: 'vertical', width: '100%',
-                  borderColor: analysisDetail.trim() ? '#e2e8f0' : '#fca5a5',
+                  fontSize: 12, color: '#3b82f6', background: 'none',
+                  border: '1px dashed #93c5fd', borderRadius: 8,
+                  padding: '6px 14px', cursor: 'pointer', width: '100%',
                 }}
-              />
+              >+ 원인 추가</button>
             </div>
           </div>
         ) : isAction ? (
@@ -509,6 +604,25 @@ export default function ClaimDetail() {
                 }}
               />
             </div>
+            {/* 사진 첨부 (선택) */}
+            <div className="form-group" style={{ marginBottom: 12 }}>
+              <label style={{ fontSize: 12, color: '#64748b' }}>사진 첨부 <span style={{ fontSize: 11, color: '#94a3b8' }}>(선택)</span></label>
+              <input type="file" accept="image/*" multiple
+                onChange={e => { setAdvFiles(prev => [...prev, ...Array.from(e.target.files || [])]); e.target.value = ''; }}
+                style={{ fontSize: 12 }}
+              />
+              {advFiles.length > 0 && (
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 6 }}>
+                  {advFiles.map((f, i) => (
+                    <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 4, background: '#eff6ff', borderRadius: 6, padding: '2px 8px', fontSize: 11 }}>
+                      <span>📷 {f.name}</span>
+                      <button type="button" onClick={() => setAdvFiles(prev => prev.filter((_, j) => j !== i))}
+                        style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#94a3b8', padding: 0 }}>✕</button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
           </div>
         ) : (
           /* ── 그 외 단계: 처리 내용 ── */
@@ -531,6 +645,25 @@ export default function ClaimDetail() {
                 처리 내용을 입력해야 다음 단계로 진행할 수 있습니다
               </div>
             )}
+            {/* 사진 첨부 (선택) */}
+            <div style={{ marginTop: 10 }}>
+              <label style={{ fontSize: 12, color: '#64748b', display: 'block', marginBottom: 4 }}>사진 첨부 <span style={{ fontSize: 11, color: '#94a3b8' }}>(선택)</span></label>
+              <input type="file" accept="image/*" multiple
+                onChange={e => { setAdvFiles(prev => [...prev, ...Array.from(e.target.files || [])]); e.target.value = ''; }}
+                style={{ fontSize: 12 }}
+              />
+              {advFiles.length > 0 && (
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 6 }}>
+                  {advFiles.map((f, i) => (
+                    <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 4, background: '#eff6ff', borderRadius: 6, padding: '2px 8px', fontSize: 11 }}>
+                      <span>📷 {f.name}</span>
+                      <button type="button" onClick={() => setAdvFiles(prev => prev.filter((_, j) => j !== i))}
+                        style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#94a3b8', padding: 0 }}>✕</button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
           </div>
         )}
 
@@ -543,14 +676,59 @@ export default function ClaimDetail() {
     );
   };
 
-  /* ── 이력 항목 렌더 (원인분석 포맷 파싱) ── */
+  /* ── 이력 항목 렌더 (원인분석 포맷 파싱 + 이미지) ── */
   const renderDescription = (desc) => {
     if (!desc) return null;
+
+    // Helper: image thumbnail strip
+    const ImgStrip = ({ urls }) => urls.length === 0 ? null : (
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 6 }}>
+        {urls.map((url, i) => (
+          <a key={i} href={url} target="_blank" rel="noreferrer">
+            <img src={url} alt={`사진${i+1}`}
+              style={{ width: 72, height: 72, objectFit: 'cover', borderRadius: 6, border: '1px solid #e2e8f0', cursor: 'pointer' }} />
+          </a>
+        ))}
+      </div>
+    );
+
+    // New JSON format for 회수품 원인분析
+    if (desc.includes('[상세JSON]')) {
+      const lines = desc.split('\n');
+      const cause = (lines.find(l => l.startsWith('[원인]')) || '').replace('[원인] ', '');
+      const jsonLine = lines.find(l => l.startsWith('[상세JSON]')) || '';
+      let causesArr = [];
+      try { causesArr = JSON.parse(jsonLine.replace('[상세JSON] ', '')); } catch {}
+      return (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+          {cause && (
+            <div style={{ display: 'flex', gap: 6, alignItems: 'flex-start' }}>
+              <span style={{ fontSize: 10, fontWeight: 700, padding: '1px 6px', borderRadius: 4, flexShrink: 0, background: '#dbeafe', color: '#1e40af' }}>원인</span>
+              <span>{cause}</span>
+            </div>
+          )}
+          {causesArr.map((c, i) => (
+            <div key={i} style={{ borderLeft: '3px solid #93c5fd', paddingLeft: 8, marginTop: 4 }}>
+              <div style={{ fontSize: 11, fontWeight: 600, color: '#1e40af', marginBottom: 2 }}>{i + 1}번째 원인</div>
+              <div style={{ whiteSpace: 'pre-wrap' }}>{c.text}</div>
+              {c.imgs && <ImgStrip urls={c.imgs} />}
+            </div>
+          ))}
+        </div>
+      );
+    }
+
+    // Plain format or old [상세] format or [조치내용] format
     if (desc.startsWith('[원인]') || desc.startsWith('[조치내용]')) {
       const lines = desc.split('\n');
+      // Extract trailing [imgs] if any
+      const imgsLine = lines.find(l => l.startsWith('[imgs]')) || '';
+      let imgs = [];
+      try { if (imgsLine) imgs = JSON.parse(imgsLine.replace('[imgs] ', '')); } catch {}
+      const displayLines = lines.filter(l => !l.startsWith('[imgs]'));
       return (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-          {lines.map((line, i) => {
+          {displayLines.map((line, i) => {
             const isOrigin     = line.startsWith('[원인]');
             const isDetail     = line.startsWith('[상세]');
             const isAction     = line.startsWith('[조치내용]');
@@ -562,21 +740,35 @@ export default function ClaimDetail() {
             return (
               <div key={i} style={{ display: 'flex', gap: 6, alignItems: 'flex-start' }}>
                 {label && (
-                  <span style={{
-                    fontSize: 10, fontWeight: 700, padding: '1px 6px',
-                    borderRadius: 4, flexShrink: 0, marginTop: 1,
-                    background: bg, color,
-                  }}>{label}</span>
+                  <span style={{ fontSize: 10, fontWeight: 700, padding: '1px 6px', borderRadius: 4, flexShrink: 0, marginTop: 1, background: bg, color }}>{label}</span>
                 )}
                 <span>{text}</span>
               </div>
             );
           })}
+          {imgs.length > 0 && <ImgStrip urls={imgs} />}
         </div>
       );
     }
+
+    // Plain text with optional [imgs]
+    if (desc.includes('[imgs]')) {
+      const parts = desc.split('\n');
+      const imgsLine = parts.find(l => l.startsWith('[imgs]')) || '';
+      const text = parts.filter(l => !l.startsWith('[imgs]')).join('\n');
+      let imgs = [];
+      try { if (imgsLine) imgs = JSON.parse(imgsLine.replace('[imgs] ', '')); } catch {}
+      return (
+        <div>
+          <div className="tl-desc" style={{ whiteSpace: 'pre-wrap' }}>{text}</div>
+          <ImgStrip urls={imgs} />
+        </div>
+      );
+    }
+
     return <div className="tl-desc">{desc}</div>;
   };
+
 
   return (
     <div>
@@ -1008,3 +1200,7 @@ export default function ClaimDetail() {
     </div>
   );
 }
+
+
+
+

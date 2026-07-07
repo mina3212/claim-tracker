@@ -512,6 +512,17 @@ export async function getSupplierFileUrl(filePath) {
   return data.signedUrl;
 }
 
+// 처리단계 이미지 업로드 (1년 유효 서명 URL 반환)
+export async function uploadStageImage(file, claimId) {
+  const ext = file.name.includes('.') ? '.' + file.name.split('.').pop() : '';
+  const path = `stage-images/${claimId}/${uid()}${ext}`;
+  const { error } = await sb.storage.from(BUCKET).upload(path, file, { cacheControl: '3600', upsert: false });
+  if (error) throw error;
+  const { data, error: urlErr } = await sb.storage.from(BUCKET).createSignedUrl(path, 31536000);
+  if (urlErr) throw urlErr;
+  return data.signedUrl;
+}
+
 export async function fetchClaimIdsWithFiles() {
   const { data, error } = await sb.from('supplier_claim_files').select('claim_id');
   if (error) throw error;
