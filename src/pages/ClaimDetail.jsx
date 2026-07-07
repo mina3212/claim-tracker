@@ -9,6 +9,7 @@ import Tooltip from '../components/Tooltip';
 import StageTracker from '../components/StageTracker';
 import StageBadge from '../components/StageBadge';
 import PartSearchModal from '../components/PartSearchModal';
+import CustomerSearchModal from '../components/CustomerSearchModal';
 import DeleteRequestModal from '../components/DeleteRequestModal';
 
 const CAUSES = ['사용자 과실', '생산공정', '제품불량', '구조불량', '배송오류', '기타'];
@@ -144,8 +145,9 @@ export default function ClaimDetail() {
   const [editMode, setEditMode]             = useState(false);
   const [editForm, setEditForm]             = useState(null);
   const [saving,   setSaving]               = useState(false);
-  const [partSearchOpen, setPartSearchOpen] = useState(false);
-  const [deleteReqOpen,  setDeleteReqOpen]  = useState(false);
+  const [partSearchOpen,     setPartSearchOpen]     = useState(false);
+  const [customerSearchOpen, setCustomerSearchOpen] = useState(false);
+  const [deleteReqOpen,      setDeleteReqOpen]      = useState(false);
 
   // 훅은 반드시 조기 리턴 전에 호출 (Rules of Hooks)
   const claim = claims.find(c => c.id === id);
@@ -940,7 +942,10 @@ export default function ClaimDetail() {
               </div>
               <div className="form-group form-span-2">
                 <label>고객사명 <span className="required-star">*</span></label>
-                <input value={editForm.customer_name} onChange={setEF('customer_name')} placeholder="고객사명" />
+                <div style={{ display: 'flex', gap: 6 }}>
+                  <input value={editForm.customer_name} onChange={setEF('customer_name')} placeholder="고객사명" style={{ flex: 1 }} />
+                  <button type="button" className="btn btn-ghost btn-icon" onClick={() => setCustomerSearchOpen(true)}>🔍</button>
+                </div>
               </div>
               <div className="form-group">
                 <label>발생일</label>
@@ -991,9 +996,9 @@ export default function ClaimDetail() {
                 <label>품목 유형</label>
                 <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
                   {PRODUCT_TYPES.map(t => {
-                    const tips = { '수입품': '해외 수입 품목', '자체제작상품': 'AJW, SCON, AJP 직접생산품', '내수품': '국내 구매 품목' };
+                    const tips = { '수입부품': '해외에서 수입한 부품', '수입완제품': '해외에서 수입한 완제품', '내수부품': '국내 구매 부품', '내수완제품': '국내 구매 완제품', '자체제작상품': 'SCON, AJP 생산제품' };
                     return (
-                      <Tooltip key={t} text={tips[t]}>
+                      <Tooltip key={t} text={tips[t] || ''}>
                         <button type="button"
                           onClick={() => setEditForm(prev => ({ ...prev, product_type: prev.product_type === t ? '' : t }))}
                           style={{
@@ -1364,6 +1369,12 @@ export default function ClaimDetail() {
         <PartSearchModal
           onSelect={(pno, pname) => setEditForm(prev => ({ ...prev, part_number: pno, part_name: pname }))}
           onClose={() => setPartSearchOpen(false)}
+        />
+      )}
+      {customerSearchOpen && (
+        <CustomerSearchModal
+          onSelect={name => setEditForm(prev => ({ ...prev, customer_name: name }))}
+          onClose={() => setCustomerSearchOpen(false)}
         />
       )}
 
