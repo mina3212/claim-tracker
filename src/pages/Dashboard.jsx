@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useClaims } from '../context/ClaimsContext';
 import { useSupplierClaims } from '../context/SupplierClaimsContext';
@@ -25,6 +25,21 @@ export default function Dashboard() {
   const { department, isAdmin } = useAuth();
   const showSupplier = canViewSupplierClaims(department, isAdmin);
   const navigate = useNavigate();
+
+  // ClaimList와 동일한 부서별 접근 범위 필터
+  const deptFilter = useMemo(() => {
+    if (isAdmin || department === '품질기술팀') return 'all';
+    if (department === '마케팅팀') return 'overseas';
+    if (department === '영업팀' || department === '영업관리팀') return 'domestic';
+    return 'all';
+  }, [isAdmin, department]);
+
+  const visibleClaims = useMemo(() => {
+    if (deptFilter === 'all') return claims;
+    if (deptFilter === 'overseas') return claims.filter(c => c.customer_group === '해외고객사');
+    if (deptFilter === 'domestic') return claims.filter(c => c.customer_group !== '해외고객사');
+    return claims;
+  }, [claims, deptFilter]);
   const [modal, setModal] = useState(null);
   const [activeTab, setActiveTab] = useState('customer');
 
@@ -49,12 +64,12 @@ export default function Dashboard() {
     </div>
   );
 
-  const total     = claims.length;
-  const active    = claims.filter(c => c.current_stage !== '종결').length;
-  const closed    = claims.filter(c => c.current_stage === '종결').length;
+  const total     = visibleClaims.length;
+  const active    = visibleClaims.filter(c => c.current_stage !== '종결').length;
+  const closed    = visibleClaims.filter(c => c.current_stage === '종결').length;
   const thisMonth = new Date().toISOString().slice(0, 7);
-  const newThis   = claims.filter(c => (c.receipt_date || c.created_at || '').slice(0, 7) === thisMonth).length;
-  const stageCounts = Object.fromEntries(STAGES.map(s => [s, claims.filter(c => c.current_stage === s).length]));
+  const newThis   = visibleClaims.filter(c => (c.receipt_date || c.created_at || '').slice(0, 7) === thisMonth).length;
+  const stageCounts = Object.fromEntries(STAGES.map(s => [s, visibleClaims.filter(c => c.current_stage === s).length]));
 
   const sTotal    = supplierClaims.length;
   const sActive   = supplierClaims.filter(c => c.current_stage !== '종결').length;
@@ -62,7 +77,7 @@ export default function Dashboard() {
   const sNewThis  = supplierClaims.filter(c => (c.receipt_date || c.created_at || '').slice(0, 7) === thisMonth).length;
   const sStageCounts = Object.fromEntries(SUPPLIER_STAGES.map(s => [s, supplierClaims.filter(c => c.current_stage === s).length]));
 
-  const recent = [...claims]
+  const recent = [...visibleClaims]
     .sort((a, b) => (b.receipt_date || b.created_at || '') > (a.receipt_date || a.created_at || '') ? 1 : -1)
     .slice(0, 8);
 
@@ -76,22 +91,22 @@ export default function Dashboard() {
     {
       label: '전체 클레임', value: total, sub: '누적 건',
       color: '#1e293b', bg: '#f8fafc', border: '#e2e8f0', icon: '📋',
-      items: claims,
+      items: visibleClaims,
     },
     {
       label: '처리 중', value: active, sub: '진행 중인 클레임',
       color: '#b45309', bg: '#fffbeb', border: '#fde68a', icon: '⏳',
-      items: claims.filter(c => c.current_stage !== '종결'),
+      items: visibleClaims.filter(c => c.current_stage !== '종결'),
     },
     {
       label: '종결 완료', value: closed, sub: '처리 완료',
       color: '#065f46', bg: '#ecfdf5', border: '#6ee7b7', icon: '✅',
-      items: claims.filter(c => c.current_stage === '종결'),
+      items: visibleClaims.filter(c => c.current_stage === '종결'),
     },
     {
       label: '이번 달 신규', value: newThis, sub: thisMonth + ' 기준',
       color: '#1d4ed8', bg: '#eff6ff', border: '#93c5fd', icon: '🆕',
-      items: claims.filter(c => (c.receipt_date || c.created_at || '').slice(0, 7) === thisMonth),
+      items: visibleClaims.filter(c => (c.receipt_date || c.created_at || '').slice(0, 7) === thisMonth),
     },
   ];
 
@@ -192,7 +207,7 @@ export default function Dashboard() {
                 borderColor: sc.dot, cursor: 'pointer', transition: '.15s',
                 background: sc.bg,
               }}
-              onClick={() => openModal(stage, STAGE_ICONS[i], sc.dot, claims.filter(c => c.current_stage === stage), '/claims')}
+              onClick={() => openModal(stage, STAGE_ICONS[i], sc.dot, visibleClaims.filter(c => c.current_stage === stage), '/claims')}
               onMouseEnter={e => { e.currentTarget.style.transform = 'translateY(-2px)'; e.currentTarget.style.boxShadow = `0 4px 14px ${sc.dot}30`; }}
               onMouseLeave={e => { e.currentTarget.style.transform = ''; e.currentTarget.style.boxShadow = ''; }}
             >
