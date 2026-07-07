@@ -1,37 +1,44 @@
-import { useEffect, useState } from 'react';
-import { sb } from '../lib/supabase';
+import { useEffect, useState, useRef } from 'react';
+
+const HEARTBEAT_INTERVAL = 30 * 1000;  // 30초
+const POLL_INTERVAL      = 30 * 1000;  // 30초
 
 export function usePresence(user, displayName, department) {
   const [onlineUsers, setOnlineUsers] = useState([]);
+  const timerRef = useRef(null);
 
   useEffect(() => {
     if (!user) return;
 
-    const channel = sb.channel('online-presence', {
-      config: { presence: { key: user.id } },
-    });
+    const sendHeartbeat = async () => {
+      try {
+        await fetch('/api/presence/heartbeat', {
+          method:      'POST',
+          credentials: 'include',
+          headers:     { 'Content-Type': 'application/json' },
+          body:        JSON.stringify({ display_name: displayName || user.email, department: department || '' }),
+        });
+      } catch { /* 오프라인 시 무시 */ }
+    };
 
-    channel
-      .on('presence', { event: 'sync' }, () => {
-        const state = channel.presenceState();
-        // presenceState는 { [key]: [{ ...payload }] } 형태
-        const users = Object.values(state)
-          .flat()
-          .sort((a, b) => a.display_name?.localeCompare(b.display_name || '') || 0);
-        setOnlineUsers(users);
-      })
-      .subscribe(async (status) => {
-        if (status === 'SUBSCRIBED') {
-          await channel.track({
-            user_id:      user.id,
-            display_name: displayName || user.email,
-            department:   department  || '',
-            email:        user.email  || '',
-          });
-        }
-      });
+    const pollPresence = async () => {
+      try {
+        const res   = await fetch('/api/presence', { credentials: 'include' });
+        if (res.ok) setOnlineUsers(await res.json());
+      } catch { /* 무시 */ }
+    };
 
-    return () => { channel.unsubscribe(); };
+    // 즉시 실행
+    sendHeartbeat();
+    pollPresence();
+
+    // 주기적 실행
+    timerRef.current = setInterval(() => {
+      sendHeartbeat();
+      pollPresence();
+    }, Math.max(HEARTBEAT_INTERVAL, POLL_INTERVAL));
+
+    return () => { clearInterval(timerRef.current); };
   }, [user?.id, displayName, department]);
 
   return onlineUsers;

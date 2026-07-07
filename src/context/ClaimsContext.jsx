@@ -1,26 +1,36 @@
 import { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
-import { fetchClaims, fetchAllStages, fetchDeleteRequests, sb } from '../lib/supabase';
+import { fetchClaims, fetchAllStages, fetchDeleteRequests } from '../lib/supabase';
 
 const ClaimsCtx = createContext(null);
+
+const POLL_INTERVAL = 30 * 1000; // 30초 주기로 폴링
 
 export function ClaimsProvider({ children }) {
   const [claims,         setClaims]         = useState([]);
   const [stages,         setStages]         = useState([]);
   const [deleteRequests, setDeleteRequests] = useState([]);
-  const [loading,       setLoading]       = useState(true);
-  const [dbReady,       setDbReady]       = useState(true);
-  const [notifications, setNotifications] = useState([]);
-  const currentUserRef = useRef(null);
+  const [loading,        setLoading]        = useState(true);
+  const [dbReady,        setDbReady]        = useState(true);
+  const [notifications,  setNotifications]  = useState([]);
+  const prevClaimIdsRef = useRef(new Set());
 
   const refresh = useCallback(async () => {
     setLoading(true);
     try {
       const [c, s] = await Promise.all([fetchClaims(), fetchAllStages()]);
+
+      // 폴링으로 새 클레임 감지 (다른 사용자가 접수한 건)
+      const newOnes = c.filter(claim => !prevClaimIdsRef.current.has(claim.id));
+      if (prevClaimIdsRef.current.size > 0 && newOnes.length > 0) {
+        setNotifications(prev => [...prev, ...newOnes]);
+      }
+      prevClaimIdsRef.current = new Set(c.map(cl => cl.id));
+
       setClaims(c);
       setStages(s);
       setDbReady(true);
     } catch (e) {
-      if (e.code === '42P01') setDbReady(false);
+      if (e.message?.includes('42P01')) setDbReady(false);
       console.error('데이터 로드 실패:', e);
     } finally {
       setLoading(false);
@@ -31,25 +41,14 @@ export function ClaimsProvider({ children }) {
     } catch { /* delete_requests 테이블 미생성 시 무시 */ }
   }, []);
 
+  // 최초 로드
   useEffect(() => { refresh(); }, [refresh]);
 
-  // Realtime 구독 — 다른 사용자가 접수한 클레임 알림
+  // 30초 폴링 (Supabase Realtime 대체)
   useEffect(() => {
-    const channel = sb
-      .channel('claims-insert')
-      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'claims' }, (payload) => {
-        const newClaim = payload.new;
-        // 내가 방금 접수한 건은 제외 (created_by 비교)
-        if (newClaim.created_by && currentUserRef.current && newClaim.created_by === currentUserRef.current) return;
-        setClaims(prev => {
-          if (prev.some(c => c.id === newClaim.id)) return prev;
-          return [newClaim, ...prev];
-        });
-        setNotifications(prev => [...prev, newClaim]);
-      })
-      .subscribe();
-    return () => { sb.removeChannel(channel); };
-  }, []);
+    const timer = setInterval(() => { refresh(); }, POLL_INTERVAL);
+    return () => clearInterval(timer);
+  }, [refresh]);
 
   const getStagesFor = useCallback(
     (claimId) => stages.filter(s => s.claim_id === claimId).sort((a, b) => a.created_at.localeCompare(b.created_at)),
@@ -59,6 +58,7 @@ export function ClaimsProvider({ children }) {
   const addClaim = useCallback((claim, firstEntry) => {
     setClaims(prev => [claim, ...prev]);
     setStages(prev => [...prev, firstEntry]);
+    prevClaimIdsRef.current.add(claim.id);
   }, []);
 
   const updateClaimStage = useCallback((claimId, nextStage, entry) => {
@@ -70,6 +70,7 @@ export function ClaimsProvider({ children }) {
     setClaims(prev => prev.filter(c => c.id !== id));
     setStages(prev => prev.filter(s => s.claim_id !== id));
     setDeleteRequests(prev => prev.filter(r => r.claim_id !== id));
+    prevClaimIdsRef.current.delete(id);
   }, []);
 
   const updateClaimData = useCallback((id, data) => {
@@ -92,7 +93,7 @@ export function ClaimsProvider({ children }) {
     setNotifications(prev => prev.filter(n => n.id !== id));
   }, []);
 
-  const setCurrentUser = useCallback((uid) => { currentUserRef.current = uid; }, []);
+  const setCurrentUser = useCallback(() => {}, []); // 폴링 방식에서는 사용 안 함
 
   return (
     <ClaimsCtx.Provider value={{

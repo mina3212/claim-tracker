@@ -1,5 +1,10 @@
 .env
 .env.local
+.env.*.local
+.db-credentials
+dev-data/
+*.db
+*.sqlite
 
 # Logs
 logs
