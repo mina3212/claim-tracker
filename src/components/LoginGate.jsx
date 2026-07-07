@@ -1,8 +1,6 @@
 import { useState } from 'react';
-import { signIn, signUp, upsertProfile } from '../lib/supabase';
+import { signIn, signUp, upsertProfile, DEPARTMENTS } from '../lib/supabase';
 import { useToast } from '../context/ToastContext';
-
-const DEPARTMENTS = ['영업팀', '마케팅팀', '품질기술팀', '영업관리팀'];
 
 const FF = "'Inter','Nanum Gothic',sans-serif";
 
