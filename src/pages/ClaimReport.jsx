@@ -88,9 +88,9 @@ export default function ClaimReport() {
       <div className="rpt-body" style={{ maxWidth: 800, margin: '0 auto', padding: '24px 32px 0' }}>
 
         {/* ── 헤더 (제목 + 결재란) ── */}
-        <div style={{ borderBottom: '3px solid #1d4ed8', paddingBottom: 10, marginBottom: 14, display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-          <div>
-            <div style={{ fontSize: 20, fontWeight: 800, color: '#1d4ed8', letterSpacing: '-0.5px' }}>클레임 처리결과보고서</div>
+        <div style={{ borderBottom: '3px solid #1d4ed8', paddingBottom: 10, marginBottom: 14, display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', gap: 16 }}>
+          <div style={{ flex: '1 1 auto' }}>
+            <div style={{ fontSize: 20, fontWeight: 800, color: '#1d4ed8', letterSpacing: '-0.5px', whiteSpace: 'nowrap' }}>클레임 처리결과보고서</div>
             <div style={{ fontSize: 10, color: '#64748b', marginTop: 3 }}>CLAIM PROCESSING RESULT REPORT</div>
             <div style={{ marginTop: 8 }}>
               <div style={{ fontSize: 12, fontWeight: 700, color: '#0f172a' }}>(주)에이제이월드</div>
@@ -98,22 +98,35 @@ export default function ClaimReport() {
             </div>
           </div>
 
-          {/* 결재란 */}
-          <table style={{ borderCollapse: 'collapse', fontSize: 10, alignSelf: 'flex-end', marginBottom: 2 }}>
-            <thead>
+          {/* 결재란 — 참고 양식 스타일 */}
+          <table style={{ borderCollapse: 'collapse', flexShrink: 0 }}>
+            <tbody>
               <tr>
+                <td rowSpan={3} style={{
+                  border: '1px solid #94a3b8', width: 18,
+                  writingMode: 'vertical-rl', textOrientation: 'upright',
+                  textAlign: 'center', fontWeight: 800, fontSize: 11,
+                  letterSpacing: 2, background: '#f1f5f9', padding: '4px 2px',
+                }}>결재</td>
                 {APPROVERS.map(r => (
                   <td key={r} style={{
-                    border: '1px solid #94a3b8', padding: '3px 0', textAlign: 'center',
-                    fontWeight: 700, fontSize: 10, background: '#f1f5f9', width: 68,
+                    border: '1px solid #94a3b8', width: 56, padding: '3px 4px',
+                    textAlign: 'center', fontWeight: 700, fontSize: 10,
+                    background: '#f1f5f9',
                   }}>{r}</td>
                 ))}
               </tr>
-            </thead>
-            <tbody>
               <tr>
                 {APPROVERS.map(r => (
-                  <td key={r} style={{ border: '1px solid #94a3b8', height: 58, width: 68 }} />
+                  <td key={r} style={{ border: '1px solid #94a3b8', height: 46, width: 56 }} />
+                ))}
+              </tr>
+              <tr>
+                {APPROVERS.map(r => (
+                  <td key={r} style={{
+                    border: '1px solid #94a3b8', height: 16, width: 56,
+                    fontSize: 8.5, color: '#94a3b8', textAlign: 'center', verticalAlign: 'middle',
+                  }}></td>
                 ))}
               </tr>
             </tbody>
@@ -261,6 +274,11 @@ export default function ClaimReport() {
 
         @media print {
           .report-screen-bar { display: none !important; }
+          .sidebar { display: none !important; }
+          .print-header { display: none !important; }
+          .mobile-topbar { display: none !important; }
+          .app-layout { display: block !important; }
+          .main-content { padding: 0 !important; margin: 0 !important; }
           @page { size: A4 portrait; margin: 8mm 10mm; }
           body { background: #fff !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
           .rpt-body { padding: 0 2px !important; }
