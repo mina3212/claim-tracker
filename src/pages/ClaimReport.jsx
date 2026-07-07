@@ -84,6 +84,21 @@ export default function ClaimReport() {
   const causeParsed  = causeEntry  ? parseDesc(causeEntry.description)  : null;
   const actionParsed = actionEntry ? parseDesc(actionEntry.description) : null;
 
+  // ── 관련 사진 수집 (섹션 4용) ──────────────────────────────────────────────
+  const photoGroups = [];
+  const intakeImgsMatch = (claim.defect_description || '').match(/\n+\[imgs\] (\[.*\])$/s);
+  if (intakeImgsMatch) {
+    try { const imgs = JSON.parse(intakeImgsMatch[1]); if (imgs.length) photoGroups.push({ label: '접수 첨부 사진', imgs }); } catch {}
+  }
+  history.forEach(entry => {
+    const p = parseDesc(entry.description);
+    let imgs = [];
+    if (p.type === 'causeJson') p.causesArr.forEach(c => { if (c.imgs && c.imgs.length) imgs.push(...c.imgs); });
+    else if (p.type === 'action' && p.imgs && p.imgs.length) imgs = p.imgs;
+    else if (p.type === 'withImgs' && p.imgs && p.imgs.length) imgs = p.imgs;
+    if (imgs.length) photoGroups.push({ label: entry.stage_name + ' 첨부 사진', imgs });
+  });
+
   return (
     <div style={{ fontFamily: "'Nanum Gothic','Malgun Gothic',sans-serif", background: '#fff', minHeight: '100vh', padding: '0 0 40px' }}>
 
@@ -196,26 +211,8 @@ export default function ClaimReport() {
             </tr>
             <tr>
               <td className="rpt-td-lbl" style={{ verticalAlign: 'top' }}>불량 내용</td>
-              <td className="rpt-td-val" colSpan={3} style={{ lineHeight: 1.5 }}>
-                {(() => {
-                  const desc = claim.defect_description || '';
-                  let imgs = [];
-                  const m = desc.match(/\n\n\[imgs\] (\[.*\])$/s);
-                  if (m) { try { imgs = JSON.parse(m[1]); } catch {} }
-                  const textPart = desc.replace(/\n\n\[imgs\] \[.*\]$/s, '');
-                  return (
-                    <>
-                      <div style={{ whiteSpace: 'pre-wrap' }}>{textPart || '-'}</div>
-                      {imgs.length > 0 && (
-                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginTop: 6 }}>
-                          {imgs.map((url, i) => (
-                            <img key={i} src={url} alt="" style={{ width: 70, height: 70, objectFit: 'cover', borderRadius: 4, border: '1px solid #e2e8f0' }} />
-                          ))}
-                        </div>
-                      )}
-                    </>
-                  );
-                })()}
+              <td className="rpt-td-val" colSpan={3} style={{ lineHeight: 1.5, whiteSpace: 'pre-wrap' }}>
+                {(claim.defect_description || '').replace(/\n+\[imgs\] \[.*\]$/s, '') || '-'}
               </td>
             </tr>
           </tbody>
@@ -243,42 +240,13 @@ export default function ClaimReport() {
                       <div key={ci} style={{ marginTop: 4, borderLeft: '2px solid #93c5fd', paddingLeft: 6 }}>
                         <div style={{ fontWeight: 600, fontSize: 10 }}>{ci+1}번째 원인</div>
                         <div style={{ whiteSpace: 'pre-wrap' }}>{c.text}</div>
-                        {c.imgs && c.imgs.length > 0 && (
-                          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginTop: 4 }}>
-                            {c.imgs.map((url, ui) => (
-                              <img key={ui} src={url} alt="" style={{ width: 60, height: 60, objectFit: 'cover', borderRadius: 4, border: '1px solid #e2e8f0' }} />
-                            ))}
-                          </div>
-                        )}
                       </div>
                     ))}
                   </div>
                 );
                 if (parsed.type === 'cause')  return <div style={{ whiteSpace: 'pre-wrap' }}>[원인] {parsed.cause}{parsed.detail ? '\n[상세] ' + parsed.detail : ''}</div>;
-                if (parsed.type === 'action') return (
-                  <div>
-                    <div style={{ whiteSpace: 'pre-wrap' }}>[조치] {parsed.action}{parsed.prevent ? '\n[재발방지] ' + parsed.prevent : ''}</div>
-                    {parsed.imgs && parsed.imgs.length > 0 && (
-                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginTop: 4 }}>
-                        {parsed.imgs.map((url, ui) => (
-                          <img key={ui} src={url} alt="" style={{ width: 60, height: 60, objectFit: 'cover', borderRadius: 4, border: '1px solid #e2e8f0' }} />
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                );
-                if (parsed.type === 'withImgs') return (
-                  <div>
-                    <div style={{ whiteSpace: 'pre-wrap' }}>{parsed.text}</div>
-                    {parsed.imgs.length > 0 && (
-                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginTop: 4 }}>
-                        {parsed.imgs.map((url, ui) => (
-                          <img key={ui} src={url} alt="" style={{ width: 60, height: 60, objectFit: 'cover', borderRadius: 4, border: '1px solid #e2e8f0' }} />
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                );
+                if (parsed.type === 'action') return <div style={{ whiteSpace: 'pre-wrap' }}>[조치] {parsed.action}{parsed.prevent ? '\n[재발방지] ' + parsed.prevent : ''}</div>;
+                if (parsed.type === 'withImgs') return <div style={{ whiteSpace: 'pre-wrap' }}>{parsed.text}</div>;
                 return <div style={{ whiteSpace: 'pre-wrap' }}>{parsed.text || '-'}</div>;
               };
               return (
@@ -315,13 +283,6 @@ export default function ClaimReport() {
                     <div key={i} style={{ marginBottom: 8, borderLeft: '2px solid #93c5fd', paddingLeft: 8 }}>
                       <div style={{ fontWeight: 700, fontSize: 10, color: '#1e40af', marginBottom: 2 }}>{i+1}번째 원인</div>
                       <div style={{ whiteSpace: 'pre-wrap' }}>{c.text}</div>
-                      {c.imgs && c.imgs.length > 0 && (
-                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginTop: 4 }}>
-                          {c.imgs.map((url, ui) => (
-                            <img key={ui} src={url} alt="" style={{ width: 80, height: 80, objectFit: 'cover', borderRadius: 4, border: '1px solid #e2e8f0' }} />
-                          ))}
-                        </div>
-                      )}
                     </div>
                   ))
                 ) : (
@@ -339,6 +300,30 @@ export default function ClaimReport() {
             </tr>
           </tbody>
         </table>
+
+        {/* 4. 관련 사진 — 사진이 있는 경우에만 표시 */}
+        {photoGroups.length > 0 && (
+          <>
+            <div className="rpt-section">4. 관련 사진</div>
+            <table className="rpt-tbl">
+              <tbody>
+                {photoGroups.map((group, gi) => (
+                  <tr key={gi}>
+                    <td className="rpt-td-lbl" style={{ verticalAlign: 'top', width: '16%' }}>{group.label}</td>
+                    <td className="rpt-td-val">
+                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10 }}>
+                        {group.imgs.map((url, ui) => (
+                          <img key={ui} src={url} alt={`사진${ui + 1}`}
+                            style={{ width: 160, height: 160, objectFit: 'cover', borderRadius: 6, border: '1px solid #cbd5e1' }} />
+                        ))}
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </>
+        )}
 
         <div style={{ marginTop: 20, fontSize: 9, color: '#94a3b8', textAlign: 'center', borderTop: '1px solid #e2e8f0', paddingTop: 10 }}>
           본 문서는 (주)에이제이월드 클레임 관리 시스템에서 자동 생성되었습니다.
