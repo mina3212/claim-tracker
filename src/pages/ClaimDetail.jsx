@@ -821,7 +821,7 @@ export default function ClaimDetail() {
       {/* 처리 단계 */}
       <div className="card" style={{ marginBottom: 16 }}>
         <div className="card-title">📍 처리 단계 현황</div>
-        <StageTracker currentStage={claim.current_stage} />
+        <StageTracker currentStage={claim.current_stage} stageEntries={history} />
 
         {user && !isClosed && renderAdvanceForm()}
 
