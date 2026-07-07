@@ -123,9 +123,16 @@ export default function ClaimDetail() {
   const [partSearchOpen, setPartSearchOpen] = useState(false);
   const [deleteReqOpen,  setDeleteReqOpen]  = useState(false);
 
+  // 훅은 반드시 조기 리턴 전에 호출 (Rules of Hooks)
+  const claim = claims.find(c => c.id === id);
+  useEffect(() => {
+    if (!claim) return;
+    const date = claim.receipt_date ? ` (${claim.receipt_date})` : '';
+    setPrintTitle(`AJW 클레임 상세 — ${claim.customer_name}${date}`);
+  }, [claim, setPrintTitle]);
+
   if (loading) return <div className="loading">⏳ 불러오는 중...</div>;
 
-  const claim = claims.find(c => c.id === id);
   if (!claim) return (
     <div>
       <button className="back-btn" onClick={() => navigate('/claims')}>← 목록으로</button>
@@ -138,12 +145,6 @@ export default function ClaimDetail() {
   const isClosed   = claim.current_stage === '종결';
   const nextStage  = !isClosed ? STAGES[currentIdx + 1] : null;
   const pendingReqs = deleteRequests.filter(r => r.claim_id === id);
-
-  useEffect(() => {
-    if (!claim) return;
-    const date = claim.receipt_date ? ` (${claim.receipt_date})` : '';
-    setPrintTitle(`AJW 클레임 상세 — ${claim.customer_name}${date}`);
-  }, [claim, setPrintTitle]);
 
   /* ── 원인 체크박스 토글 ── */
   const toggleCause = (cause) => {
