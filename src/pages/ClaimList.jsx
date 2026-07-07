@@ -240,7 +240,7 @@ export default function ClaimList() {
                 {filtered.map(c => {
                   const stage = c.current_stage;
                   const dotStatus = stage === '종결' ? 'done'
-                    : stage === '접수' ? 'new' : 'progress';
+                    : (stage === '접수' || stage === '1차 대응') ? 'new' : 'progress';
                   const symptom = extractSymptom(c.defect_description);
                   return (
                   <tr key={c.id} className="clickable" onClick={() => navigate(`/claims/${c.id}`)}>
