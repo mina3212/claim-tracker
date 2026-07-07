@@ -28,6 +28,18 @@ export default function Layout() {
 
   useEffect(() => { if (user?.id) setCurrentUser(user.id); }, [user, setCurrentUser]);
 
+  // 미확인 알림 있을 때 탭 제목 깜빡임
+  useEffect(() => {
+    if (notifications.length === 0) {
+      document.title = 'AJW 클레임 관리';
+      return;
+    }
+    const titles = [`(${notifications.length}) 🔔 새 클레임 접수!`, 'AJW 클레임 관리'];
+    let idx = 0;
+    const iv = setInterval(() => { document.title = titles[idx % 2]; idx++; }, 1200);
+    return () => { clearInterval(iv); document.title = 'AJW 클레임 관리'; };
+  }, [notifications.length]);
+
   const [editingName, setEditingName] = useState(false);
   const [nameInput,   setNameInput]   = useState('');
   const [mobileOpen,  setMobileOpen]  = useState(false);

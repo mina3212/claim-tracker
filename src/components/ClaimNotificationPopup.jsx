@@ -28,12 +28,9 @@ function NotificationCard({ notification: n, onDismiss, navigate }) {
   const [visible, setVisible] = useState(false);
 
   useEffect(() => {
-    // 슬라이드 인
     const t1 = setTimeout(() => setVisible(true), 10);
-    // 8초 후 자동 닫기
-    const t2 = setTimeout(() => onDismiss(n.id), 8000);
-    return () => { clearTimeout(t1); clearTimeout(t2); };
-  }, [n.id, onDismiss]);
+    return () => clearTimeout(t1);
+  }, []);
 
   const handleClick = () => {
     navigate(`/claims/${n.id}`);
@@ -53,8 +50,8 @@ function NotificationCard({ notification: n, onDismiss, navigate }) {
         transition: 'transform .35s cubic-bezier(.22,1,.36,1), opacity .3s',
       }}
     >
-      {/* 상단 진행바 */}
-      <div style={{ height: 3, background: '#3b82f6', animation: 'shrink 8s linear forwards' }} />
+      {/* 상단 강조 바 */}
+      <div style={{ height: 3, background: 'linear-gradient(90deg, #3b82f6, #60a5fa)' }} />
 
       <div style={{ padding: '14px 16px' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 8 }}>
@@ -90,12 +87,6 @@ function NotificationCard({ notification: n, onDismiss, navigate }) {
         </button>
       </div>
 
-      <style>{`
-        @keyframes shrink {
-          from { width: 100%; }
-          to   { width: 0%; }
-        }
-      `}</style>
     </div>
   );
 }
