@@ -211,8 +211,22 @@ export default function ClaimReport() {
             </tr>
             <tr>
               <td className="rpt-td-lbl" style={{ verticalAlign: 'top' }}>불량 내용</td>
-              <td className="rpt-td-val" colSpan={3} style={{ lineHeight: 1.5, whiteSpace: 'pre-wrap' }}>
-                {(claim.defect_description || '').replace(/\n+\[imgs\] \[.*\]$/s, '') || '-'}
+              <td className="rpt-td-val" colSpan={3} style={{ lineHeight: 1.6 }}>
+                {(() => {
+                  const raw = (claim.defect_description || '').replace(/\n+\[imgs\] \[.*\]$/s, '');
+                  if (!raw) return '-';
+                  if (raw.includes('[불량증상]')) {
+                    const get = (tag) => { const m = raw.match(new RegExp(`\\[${tag}\\]\\n([\\s\\S]*?)(?=\\n\\n\\[|$)`)); return m ? m[1].trim() : ''; };
+                    const rows = [['불량증상', get('불량증상')], ['발생상황', get('발생상황')], ['고객요청사항', get('고객요청사항')]].filter(r => r[1]);
+                    return rows.map(([label, val]) => (
+                      <div key={label} style={{ display: 'flex', gap: 8, marginBottom: 3 }}>
+                        <span style={{ fontWeight: 700, color: '#374151', whiteSpace: 'nowrap', minWidth: 80 }}>{label}</span>
+                        <span style={{ whiteSpace: 'pre-wrap' }}>{val}</span>
+                      </div>
+                    ));
+                  }
+                  return <span style={{ whiteSpace: 'pre-wrap' }}>{raw}</span>;
+                })()}
               </td>
             </tr>
           </tbody>
@@ -220,7 +234,14 @@ export default function ClaimReport() {
 
         {/* 2. 처리 경과 */}
         <div className="rpt-section">2. 처리 경과</div>
-        <table className="rpt-tbl">
+        <table className="rpt-tbl" style={{ tableLayout: 'fixed' }}>
+          <colgroup>
+            <col style={{ width: '16%' }} />
+            <col style={{ width: '11%' }} />
+            <col style={{ width: '13%' }} />
+            <col style={{ width: '10%' }} />
+            <col />
+          </colgroup>
           <thead>
             <tr>
               {['단계', '처리일', '부서', '담당자', '처리 내용'].map(h => (
@@ -232,6 +253,7 @@ export default function ClaimReport() {
             {history.map((entry, i) => {
               const sc = STAGE_COLORS[entry.stage_name] || { bg: '#f1f5f9', text: '#374151' };
               const parsed = parseDesc(entry.description);
+              const rowBg = i % 2 === 0 ? '#fff' : '#f8fafc';
               const DescCell = () => {
                 if (parsed.type === 'causeJson') return (
                   <div>
@@ -250,16 +272,16 @@ export default function ClaimReport() {
                 return <div style={{ whiteSpace: 'pre-wrap' }}>{parsed.text || '-'}</div>;
               };
               return (
-                <tr key={entry.id || i} style={{ background: i % 2 === 0 ? '#fff' : '#f8fafc' }}>
-                  <td className="rpt-td-val" style={{ whiteSpace: 'nowrap' }}>
+                <tr key={entry.id || i}>
+                  <td className="rpt-td-val" style={{ background: rowBg, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                     <span style={{ background: sc.bg, color: sc.text, padding: '2px 6px', borderRadius: 8, fontSize: 10, fontWeight: 700 }}>
                       {entry.stage_name}
                     </span>
                   </td>
-                  <td className="rpt-td-val" style={{ whiteSpace: 'nowrap' }}>{entry.stage_date || '-'}</td>
-                  <td className="rpt-td-val" style={{ whiteSpace: 'nowrap' }}>{entry.handler_dept || '-'}</td>
-                  <td className="rpt-td-val" style={{ whiteSpace: 'nowrap' }}>{entry.handler || entry.user_name || entry.user_email || '-'}</td>
-                  <td className="rpt-td-val" style={{ lineHeight: 1.4 }}><DescCell /></td>
+                  <td className="rpt-td-val" style={{ background: rowBg, whiteSpace: 'nowrap' }}>{entry.stage_date || '-'}</td>
+                  <td className="rpt-td-val" style={{ background: rowBg, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{entry.handler_dept || '-'}</td>
+                  <td className="rpt-td-val" style={{ background: rowBg, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{entry.handler || entry.user_name || entry.user_email || '-'}</td>
+                  <td className="rpt-td-val" style={{ background: rowBg, lineHeight: 1.4 }}><DescCell /></td>
                 </tr>
               );
             })}
@@ -336,19 +358,19 @@ export default function ClaimReport() {
           border-left: 3px solid #3b82f6; padding-left: 9px;
           margin-top: 16px; margin-bottom: 7px;
         }
-        .rpt-tbl { width: 100%; border-collapse: collapse; font-size: 12px; }
+        .rpt-tbl { width: 100%; border-collapse: collapse; font-size: 12px; border: 1px solid #94a3b8; }
         .rpt-th {
-          border: 1px solid #cbd5e1; padding: 5px 9px;
+          border: 1px solid #94a3b8; padding: 5px 9px;
           font-size: 11px; font-weight: 700; text-align: left;
-          color: #374151; background: #f1f5f9;
+          color: #374151; background: #e2e8f0;
         }
         .rpt-td-lbl {
-          border: 1px solid #cbd5e1; padding: 6px 9px;
-          background: #f8fafc; font-weight: 600; color: #374151;
+          border: 1px solid #94a3b8; padding: 6px 9px;
+          background: #f1f5f9; font-weight: 600; color: #374151;
           font-size: 11px; white-space: nowrap;
         }
         .rpt-td-val {
-          border: 1px solid #cbd5e1; padding: 6px 10px;
+          border: 1px solid #94a3b8; padding: 6px 10px;
           color: #1e293b; font-size: 11px;
         }
 
