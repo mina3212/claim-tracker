@@ -1072,17 +1072,16 @@ export default function ClaimDetail() {
               { label: '발생일',        value: claim.occurrence_date || '-' },
               { label: '접수일',        value: claim.receipt_date || '-' },
               { label: '현재 단계',     value: null, badge: true },
-              { label: '품번',          value: claim.part_number || '-', mono: true },
+              { label: '품번',          value: claim.part_number || '-' },
               { label: '품명',          value: claim.part_name || '-' },
               { label: '품목 유형',     value: claim.product_type || '-', typeChip: claim.product_type },
               { label: '품목군',        value: claim.product_category || '-', catChip: claim.product_category },
               { label: '출고 수량',     value: claim.quantity != null ? Number(claim.quantity).toLocaleString() + ' EA' : '-' },
-              { label: 'LOT 번호',      value: claim.lot_number || '-', mono: true },
+              { label: 'LOT 번호',      value: claim.lot_number || '-' },
               { label: '불량 수량',     value: claim.defect_quantity != null ? Number(claim.defect_quantity).toLocaleString() + ' EA' : '-' },
               { label: '불량률',        value: null, defRate: true },
               { label: '영업 부서',     value: claim.sales_rep_dept || '-' },
               { label: '영업담당자',    value: claim.sales_rep_name || '-' },
-              { label: '담당자 연락처', value: claim.sales_rep_contact || '-' },
             ].map((item, idx) => (
               <div key={idx} className={`info-item${item.span === 2 ? ' info-span-2' : ''}`}>
                 <span className="info-label">{item.label}</span>
