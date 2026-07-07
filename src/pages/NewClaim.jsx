@@ -105,8 +105,10 @@ export default function NewClaim() {
 
     setSub(true);
     try {
+      // defect_symptom/situation/customer_request는 DB 컬럼 없음 — 스프레드에서 제외
+      const { defect_symptom, defect_situation, customer_request, ...formRest } = form;
       const payload = {
-        ...form,
+        ...formRest,
         quantity:            totalQty,
         defect_quantity:     parseInt(form.defect_quantity),
         customer_name:       form.customer_name.trim(),
