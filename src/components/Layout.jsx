@@ -128,7 +128,7 @@ export default function Layout() {
           )}
           {isAdmin && (
             <NavLink to="/suppliers" className={({ isActive }) => `nav-item${isActive ? ' active' : ''}`}>
-              <span>🏭</span> 공급사 관리
+              <span>🏢</span> 거래처 관리
             </NavLink>
           )}
         </nav>

@@ -103,7 +103,7 @@ export default function Suppliers() {
 
   if (!user) return (
     <div>
-      <div className="page-header"><div className="page-title">공급사 관리</div></div>
+      <div className="page-header"><div className="page-title">거래처 관리</div></div>
       <div className="error-box">⚠️ 로그인 후 이용 가능합니다.</div>
     </div>
   );
@@ -112,7 +112,7 @@ export default function Suppliers() {
     <div>
       <div className="page-header">
         <div>
-          <div className="page-title">공급사 관리</div>
+          <div className="page-title">거래처 관리</div>
           <div className="page-sub">전체 {suppliers.length}개 공급사 등록됨</div>
         </div>
         <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>

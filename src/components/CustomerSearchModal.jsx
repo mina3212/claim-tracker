@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { searchCustomers } from '../lib/supabase';
+import { searchSuppliers } from '../lib/supabase';
 
 const OVERLAY = {
   position: 'fixed', inset: 0, background: 'rgba(0,0,0,.5)',
@@ -21,7 +21,7 @@ export default function CustomerSearchModal({ onSelect, onClose }) {
     if (!query.trim()) { setResults([]); return; }
     const timer = setTimeout(async () => {
       setLoading(true);
-      try { setResults(await searchCustomers(query)); }
+      try { setResults((await searchSuppliers(query)).map(s => s.name)); }
       finally { setLoading(false); }
     }, 250);
     return () => clearTimeout(timer);
@@ -52,7 +52,7 @@ export default function CustomerSearchModal({ onSelect, onClose }) {
         />
 
         <div style={{ fontSize: 11, color: '#94a3b8' }}>
-          기존에 등록된 고객사명에서 검색합니다. 신규 고객사는 직접 입력하세요.
+          거래처 관리에 등록된 거래처를 검색합니다. 미등록 고객사는 직접 입력하세요.
         </div>
 
         <div style={{
