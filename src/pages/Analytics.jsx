@@ -22,17 +22,28 @@ function parseCauses(description) {
   return m[1].split(',').map(c => c.trim().replace(/\(.*\)/g, '').trim()).filter(Boolean);
 }
 
-function getInsightText({ total, closeRate, topCause, topPart, topCustomer }) {
-  const parts = [];
+function getInsightText({ total, closeRate, topCause, topPart, topCustomer, causeCnt }) {
   if (total === 0) return '데이터 없음';
-  if (closeRate === 100) parts.push('모든 클레임 종결 ✅');
-  else if (closeRate >= 70) parts.push(`종결율 ${closeRate}%`);
-  else if (closeRate < 30 && total >= 2) parts.push(`⚠️ 미처리 주의 (종결 ${closeRate}%)`);
-  else parts.push(`종결율 ${closeRate}%`);
-  if (topCause) parts.push(`주요 원인: ${topCause}`);
-  if (topPart) parts.push(`최다 품목: ${topPart}`);
-  if (topCustomer) parts.push(`최다 고객사: ${topCustomer}`);
-  return parts.join(' · ');
+  const parts = [];
+
+  // 주요 원인 + 비율
+  if (topCause && causeCnt) {
+    const causeTotal = Object.values(causeCnt).reduce((a, b) => a + b, 0);
+    const pct = causeTotal > 1 ? Math.round((causeCnt[topCause] || 0) / causeTotal * 100) : 0;
+    parts.push(`주요원인: ${topCause}${pct > 0 ? ` ${pct}%` : ''}`);
+  } else if (topCause) {
+    parts.push(`주요원인: ${topCause}`);
+  }
+
+  // 미처리 경고
+  const unresolved = total - Math.round(total * closeRate / 100);
+  if (unresolved > 0) parts.push(`⏳ 미처리 ${unresolved}건`);
+
+  // 반복 품목
+  if (topPart && total >= 2) parts.push(`반복: ${topPart}`);
+  if (topCustomer && total >= 2) parts.push(`다발: ${topCustomer}`);
+
+  return parts.join(' · ') || (closeRate === 100 ? '전건 종결' : '-');
 }
 
 /* ── 기간 필터 컨트롤 ── */
@@ -188,6 +199,7 @@ export default function Analytics() {
 
   const [tab, setTab] = useState('고객사별');
   const [expandedKey, setExpandedKey] = useState(null);
+  const [cardFilter, setCardFilter] = useState(null);
 
   /* ── 기간 필터 상태 ── */
   const [periodType, setPeriodType] = useState('전체');
@@ -379,6 +391,15 @@ export default function Analytics() {
   const closed    = filteredClaims.filter(c => c.current_stage === '종결').length;
   const thisMonth = new Date().toISOString().slice(0, 7);
   const newThis   = filteredClaims.filter(c => (c.receipt_date || c.created_at || '').slice(0, 7) === thisMonth).length;
+
+  const cardClaims = useMemo(() => {
+    if (!cardFilter) return [];
+    if (cardFilter === 'all')     return [...filteredClaims].sort((a, b) => (b.receipt_date || '') > (a.receipt_date || '') ? 1 : -1);
+    if (cardFilter === 'active')  return filteredClaims.filter(c => c.current_stage !== '종결').sort((a, b) => (b.receipt_date || '') > (a.receipt_date || '') ? 1 : -1);
+    if (cardFilter === 'closed')  return filteredClaims.filter(c => c.current_stage === '종결').sort((a, b) => (b.receipt_date || '') > (a.receipt_date || '') ? 1 : -1);
+    if (cardFilter === 'newThis') return filteredClaims.filter(c => (c.receipt_date || c.created_at || '').slice(0, 7) === thisMonth);
+    return [];
+  }, [cardFilter, filteredClaims, thisMonth]);
 
   if (loading) return <div className="loading">⏳ 불러오는 중...</div>;
 
@@ -573,19 +594,67 @@ export default function Analytics() {
       </div>
 
       {/* Summary KPI */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 12, marginBottom: 20 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 12, marginBottom: cardFilter ? 0 : 20 }}>
         {[
-          { label: '전체', value: total, color: '#0f172a' },
-          { label: '처리 중', value: active, color: '#f59e0b' },
-          { label: '종결 완료', value: closed, color: '#10b981' },
-          { label: '이번달 신규', value: newThis, color: '#3b82f6' },
-        ].map(item => (
-          <div key={item.label} className="card" style={{ textAlign: 'center' }}>
-            <div style={{ fontSize: 11, color: '#64748b', marginBottom: 6 }}>{item.label}</div>
-            <div style={{ fontSize: 28, fontWeight: 700, color: item.color }}>{item.value}건</div>
-          </div>
-        ))}
+          { key: 'all',     label: '전체',      value: total,   color: '#0f172a' },
+          { key: 'active',  label: '처리 중',   value: active,  color: '#f59e0b' },
+          { key: 'closed',  label: '종결 완료', value: closed,  color: '#10b981' },
+          { key: 'newThis', label: '이번달 신규', value: newThis, color: '#3b82f6' },
+        ].map(item => {
+          const isActive = cardFilter === item.key;
+          return (
+            <div
+              key={item.key}
+              className="card"
+              onClick={() => setCardFilter(prev => prev === item.key ? null : item.key)}
+              style={{
+                textAlign: 'center', cursor: 'pointer', transition: '.15s',
+                outline: isActive ? `2px solid ${item.color}` : 'none',
+                background: isActive ? item.color + '10' : '#fff',
+                userSelect: 'none',
+              }}
+            >
+              <div style={{ fontSize: 11, color: '#64748b', marginBottom: 6 }}>{item.label}</div>
+              <div style={{ fontSize: 28, fontWeight: 700, color: item.color }}>{item.value}건</div>
+              <div style={{ fontSize: 10, color: '#94a3b8', marginTop: 4 }}>{isActive ? '▲ 닫기' : '클릭하여 보기'}</div>
+            </div>
+          );
+        })}
       </div>
+
+      {/* 카드 클릭 시 클레임 목록 */}
+      {cardFilter && (
+        <div className="card" style={{ marginBottom: 20 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+            <div className="card-title" style={{ margin: 0 }}>
+              {{all:'전체', active:'처리 중', closed:'종결 완료', newThis:'이번달 신규'}[cardFilter]} 클레임 ({cardClaims.length}건)
+            </div>
+            <button onClick={() => setCardFilter(null)} style={{ background: 'none', border: 'none', fontSize: 18, cursor: 'pointer', color: '#94a3b8' }}>✕</button>
+          </div>
+          {cardClaims.length === 0 ? (
+            <div className="empty" style={{ padding: 20 }}>해당 조건의 클레임이 없습니다</div>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6, maxHeight: 340, overflowY: 'auto' }}>
+              {cardClaims.map(c => (
+                <div
+                  key={c.id}
+                  onClick={() => navigate(`/claims/${c.id}`)}
+                  style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 12px', background: '#f8fafc', borderRadius: 8, cursor: 'pointer', border: '1px solid #e2e8f0' }}
+                  onMouseEnter={e => e.currentTarget.style.background = '#eff6ff'}
+                  onMouseLeave={e => e.currentTarget.style.background = '#f8fafc'}
+                >
+                  <StageBadge stage={c.current_stage} size="sm" />
+                  <strong style={{ fontSize: 13, minWidth: 80 }}>{c.customer_name}</strong>
+                  <span style={{ fontSize: 11, color: '#64748b', fontFamily: 'monospace' }}>{c.part_number || ''}</span>
+                  <span style={{ fontSize: 12, color: '#374151', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{c.part_name || ''}</span>
+                  <span style={{ fontSize: 11, color: '#94a3b8', whiteSpace: 'nowrap' }}>{c.receipt_date || ''}</span>
+                  <span style={{ color: '#94a3b8', fontSize: 11 }}>→</span>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
 
       {/* 탭 */}
       <div style={{ display: 'flex', gap: 4, marginBottom: 16 }} className="no-print">
@@ -607,40 +676,49 @@ export default function Analytics() {
             <div className="card-title">🏢 고객사별 클레임 분석 <span style={{ fontSize: 11, color: '#94a3b8', fontWeight: 400 }}>· 행 클릭 시 상세 보기</span></div>
             {customerAnalysis.length === 0 ? <div className="empty">데이터 없음</div> : (
               <div className="table-wrap">
-                <table>
+                <table style={{ fontSize: 12 }}>
                   <thead>
                     <tr>
-                      <th>고객사</th>
-                      {STAGES.map(s => <th key={s} style={thStyle}>{s}</th>)}
-                      <th style={thStyle}>합계</th>
-                      <th style={thStyle}>종결율</th>
+                      <th style={{ width: 130 }}>고객사</th>
+                      <th style={{ ...thStyle, width: 48 }}>합계</th>
+                      <th style={{ ...thStyle, width: 56 }}>진행중</th>
+                      <th style={{ ...thStyle, width: 60 }}>종결율</th>
+                      <th style={{ ...thStyle, width: 90 }}>주요원인</th>
                       <th>인사이트</th>
                       <th style={{ width: 20 }}></th>
                     </tr>
                   </thead>
                   <tbody>
-                    {customerAnalysis.map(item => (
-                      <Fragment key={item.name}>
-                        <tr className="clickable" onClick={() => toggleRow(item.name)}
-                          style={{ background: expandedKey === item.name ? '#f0f9ff' : '' }}>
-                          <td><strong>{item.name}</strong></td>
-                          {STAGES.map(s => (
-                            <td key={s} style={thStyle}>
-                              {item.stageCnts[s] > 0
-                                ? <span className="stage-badge" style={{ background: STAGE_COLORS[s]?.bg, color: STAGE_COLORS[s]?.text }}>{item.stageCnts[s]}</span>
+                    {customerAnalysis.map(item => {
+                      const unresolvedCnt = item.total - item.closed;
+                      return (
+                        <Fragment key={item.name}>
+                          <tr className="clickable" onClick={() => toggleRow(item.name)}
+                            style={{ background: expandedKey === item.name ? '#f0f9ff' : '' }}>
+                            <td><strong>{item.name}</strong></td>
+                            <td style={{ textAlign: 'center', fontWeight: 700 }}>{item.total}</td>
+                            <td style={thStyle}>
+                              {unresolvedCnt > 0
+                                ? <span style={{ fontWeight: 700, color: '#f59e0b' }}>{unresolvedCnt}</span>
+                                : <span style={{ color: '#10b981', fontWeight: 600 }}>-</span>}
+                            </td>
+                            <td style={thStyle}><span style={{ fontWeight: 700, color: closeColor(item.closeRate) }}>{item.closeRate}%</span></td>
+                            <td style={thStyle}>
+                              {item.topCause
+                                ? <span style={{ fontSize: 10, padding: '2px 6px', borderRadius: 4, background: '#fef3c7', color: '#92400e', fontWeight: 600, whiteSpace: 'nowrap' }}>{item.topCause}</span>
                                 : <span style={{ color: '#e2e8f0' }}>-</span>}
                             </td>
-                          ))}
-                          <td style={{ textAlign: 'center', fontWeight: 700 }}>{item.total}</td>
-                          <td style={thStyle}><span style={{ fontWeight: 700, color: closeColor(item.closeRate) }}>{item.closeRate}%</span></td>
-                          <td style={{ fontSize: 11, color: '#64748b', maxWidth: 180 }}>{getInsightText({ total: item.total, closeRate: item.closeRate, topCause: item.topCause, topPart: item.topPart })}</td>
-                          <td style={{ color: '#94a3b8', fontSize: 12 }}>{expandedKey === item.name ? '▲' : '▼'}</td>
-                        </tr>
-                        {expandedKey === item.name && (
-                          <ExpandPanel item={item} type="customer" causesByClaimId={causesByClaimId} navigate={navigate} setExpandedKey={setExpandedKey} />
-                        )}
-                      </Fragment>
-                    ))}
+                            <td style={{ fontSize: 11, color: '#475569' }}>
+                              {getInsightText({ total: item.total, closeRate: item.closeRate, topCause: item.topCause, topPart: item.topPart, causeCnt: item.causeCnt })}
+                            </td>
+                            <td style={{ color: '#94a3b8', fontSize: 12 }}>{expandedKey === item.name ? '▲' : '▼'}</td>
+                          </tr>
+                          {expandedKey === item.name && (
+                            <ExpandPanel item={item} type="customer" causesByClaimId={causesByClaimId} navigate={navigate} setExpandedKey={setExpandedKey} />
+                          )}
+                        </Fragment>
+                      );
+                    })}
                   </tbody>
                 </table>
               </div>
@@ -697,7 +775,7 @@ export default function Analytics() {
                               ? <span style={{ background: '#fef3c7', color: '#92400e', padding: '2px 6px', borderRadius: 4, fontSize: 11 }}>{item.topCause}</span>
                               : <span style={{ color: '#cbd5e1' }}>-</span>}
                           </td>
-                          <td style={{ fontSize: 11, color: '#64748b', maxWidth: 160 }}>{getInsightText({ total: item.total, closeRate: item.closeRate, topCause: item.topCause, topCustomer: item.topCustomer })}</td>
+                          <td style={{ fontSize: 11, color: '#475569' }}>{getInsightText({ total: item.total, closeRate: item.closeRate, topCause: item.topCause, topCustomer: item.topCustomer, causeCnt: item.causeCnt })}</td>
                           <td style={{ color: '#94a3b8', fontSize: 12 }}>{expandedKey === item.key ? '▲' : '▼'}</td>
                         </tr>
                         {expandedKey === item.key && (
