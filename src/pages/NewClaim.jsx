@@ -5,6 +5,7 @@ import { useClaims } from '../context/ClaimsContext';
 import { useToast } from '../context/ToastContext';
 import { insertClaim, CUSTOMER_GROUPS, PRODUCT_TYPES, PRODUCT_CATEGORIES, DEPARTMENTS } from '../lib/supabase';
 import PartSearchModal from '../components/PartSearchModal';
+import CustomerSearchModal from '../components/CustomerSearchModal';
 import Tooltip from '../components/Tooltip';
 
 const today = () => new Date().toISOString().slice(0, 10);
@@ -34,7 +35,8 @@ export default function NewClaim() {
   const navigate     = useNavigate();
   const [form, setForm]                     = useState(INITIAL);
   const [submitting, setSub]                = useState(false);
-  const [partSearchOpen, setPartSearchOpen] = useState(false);
+  const [partSearchOpen,     setPartSearchOpen]     = useState(false);
+  const [customerSearchOpen, setCustomerSearchOpen] = useState(false);
 
   if (!user) return (
     <div>
@@ -143,7 +145,10 @@ export default function NewClaim() {
 
             <div className="form-group form-span-2">
               <label>고객사명 <span className="required-star">*</span></label>
-              <input placeholder="예: ABC전자" value={form.customer_name} onChange={set('customer_name')} required />
+              <div style={{ display: 'flex', gap: 6 }}>
+                <input placeholder="예: ABC전자" value={form.customer_name} onChange={set('customer_name')} required style={{ flex: 1 }} />
+                <button type="button" className="btn btn-ghost btn-icon" onClick={() => setCustomerSearchOpen(true)}>🔍</button>
+              </div>
             </div>
             <div className="form-group">
               <label>발생일 <span className="required-star">*</span></label>
@@ -318,6 +323,12 @@ export default function NewClaim() {
         <PartSearchModal
           onSelect={handlePartSelect}
           onClose={() => setPartSearchOpen(false)}
+        />
+      )}
+      {customerSearchOpen && (
+        <CustomerSearchModal
+          onSelect={name => setForm(prev => ({ ...prev, customer_name: name }))}
+          onClose={() => setCustomerSearchOpen(false)}
         />
       )}
     </div>

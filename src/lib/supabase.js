@@ -318,6 +318,18 @@ export async function searchSuppliers(query) {
   return data || [];
 }
 
+export async function searchCustomers(query) {
+  if (!query || !query.trim()) return [];
+  const { data, error } = await sb
+    .from('claims')
+    .select('customer_name')
+    .ilike('customer_name', `%${query.trim()}%`)
+    .order('customer_name')
+    .limit(50);
+  if (error) throw error;
+  return [...new Set((data || []).map(r => r.customer_name).filter(Boolean))].slice(0, 20);
+}
+
 export async function upsertSuppliers(rows) {
   const { error } = await sb.from('suppliers').upsert(rows, { onConflict: 'name' });
   if (error) throw error;
