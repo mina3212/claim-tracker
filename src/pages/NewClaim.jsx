@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useClaims } from '../context/ClaimsContext';
 import { useToast } from '../context/ToastContext';
-import { insertClaim, CUSTOMER_GROUPS, PRODUCT_TYPES, PRODUCT_CATEGORIES, DEPARTMENTS, SALES_REPS, SHIPPING_WAREHOUSES } from '../lib/supabase';
+import { insertClaim, CUSTOMER_GROUPS, PRODUCT_TYPES, PRODUCT_CATEGORIES, SALES_DEPTS, SALES_REPS, SHIPPING_WAREHOUSES } from '../lib/supabase';
 import PartSearchModal from '../components/PartSearchModal';
 import CustomerSearchModal from '../components/CustomerSearchModal';
 import Tooltip from '../components/Tooltip';
@@ -47,15 +47,16 @@ export default function NewClaim() {
   const [form, setForm] = useState({ ...INITIAL });
   const [shipments, setShipments] = useState([EMPTY_SHIPMENT()]);
 
-  // 프로필 로드 후 부서·담당자 자동 세팅 (사용자가 직접 수정한 경우엔 덮어쓰지 않음)
+  // 프로필 로드 후 부서·담당자 자동 세팅
+  // 품질기술팀은 영업담당 부서가 아니므로 dept는 비워두고, 이름만 적용
   useEffect(() => {
-    if (department || displayName) {
-      setForm(prev => ({
-        ...prev,
-        sales_rep_dept: prev.sales_rep_dept || department || '',
-        sales_rep_name: prev.sales_rep_name || displayName || '',
-      }));
-    }
+    if (!department && !displayName) return;
+    const isSalesDept = SALES_DEPTS.includes(department);
+    setForm(prev => ({
+      ...prev,
+      sales_rep_dept: prev.sales_rep_dept || (isSalesDept ? department : ''),
+      sales_rep_name: prev.sales_rep_name || displayName || '',
+    }));
   }, [department, displayName]);
   const [submitting, setSub]                = useState(false);
   const [partSearchOpen,     setPartSearchOpen]     = useState(false);
@@ -200,15 +201,21 @@ export default function NewClaim() {
               <label>영업담당 부서 <span className="required-star">*</span></label>
               <select value={form.sales_rep_dept} onChange={set('sales_rep_dept')} required>
                 <option value="">부서 선택</option>
-                {DEPARTMENTS.map(d => <option key={d} value={d}>{d}</option>)}
+                {SALES_DEPTS.map(d => <option key={d} value={d}>{d}</option>)}
               </select>
             </div>
             <div className="form-group">
               <label>영업담당자 <span className="required-star">*</span></label>
-              <select value={form.sales_rep_name} onChange={set('sales_rep_name')} required>
-                <option value="">담당자 선택</option>
-                {SALES_REPS.map(n => <option key={n} value={n}>{n}</option>)}
-              </select>
+              <input
+                list="sales-reps-list"
+                placeholder="이름 입력 또는 선택"
+                value={form.sales_rep_name}
+                onChange={set('sales_rep_name')}
+                required
+              />
+              <datalist id="sales-reps-list">
+                {SALES_REPS.map(n => <option key={n} value={n} />)}
+              </datalist>
             </div>
             <div className="form-group">
               <label>담당자 연락처 <span className="required-star">*</span></label>
