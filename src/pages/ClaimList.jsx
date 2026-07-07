@@ -11,7 +11,7 @@ import { usePrintTitle } from '../context/PrintContext';
 
 export default function ClaimList() {
   const { claims, loading, stages, removeClaim, deleteRequests, addDeleteRequest } = useClaims();
-  const { user, isAdmin } = useAuth();
+  const { user, isAdmin, department } = useAuth();
   const toast    = useToast();
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -53,10 +53,20 @@ export default function ClaimList() {
     '기타':       { bg: '#f1f5f9', text: '#475569' },
   };
 
+  // 부서별 접근 범위: 마케팅팀 = 해외만 / 영업·영업관리 = 해외 제외 / 나머지(품질기술팀·관리자) = 전체
+  const deptFilter = useMemo(() => {
+    if (isAdmin || department === '품질기술팀') return 'all';
+    if (department === '마케팅팀') return 'overseas';
+    if (department === '영업팀' || department === '영업관리팀') return 'domestic';
+    return 'all';
+  }, [isAdmin, department]);
+
   const filtered = useMemo(() => {
     const q = search.toLowerCase().trim();
     return claims
       .filter(c => {
+        if (deptFilter === 'overseas' && c.customer_group !== '해외고객사') return false;
+        if (deptFilter === 'domestic' && c.customer_group === '해외고객사') return false;
         if (stageFilter !== 'all' && c.current_stage !== stageFilter) return false;
         if (customerFilter !== 'all' && c.customer_name !== customerFilter) return false;
         if (q) {
@@ -66,7 +76,7 @@ export default function ClaimList() {
         return true;
       })
       .sort((a, b) => (b.receipt_date || b.created_at || '') > (a.receipt_date || a.created_at || '') ? 1 : -1);
-  }, [claims, search, stageFilter, customerFilter]);
+  }, [claims, search, stageFilter, customerFilter, deptFilter]);
 
   const pendingIds = useMemo(() =>
     new Set(deleteRequests.map(r => r.claim_id)),
@@ -130,7 +140,11 @@ export default function ClaimList() {
       <div className="page-header">
         <div>
           <div className="page-title">클레임 목록</div>
-          <div className="page-sub">총 {claims.length}건 · 검색결과 {filtered.length}건</div>
+          <div className="page-sub">
+            검색결과 {filtered.length}건
+            {deptFilter === 'overseas' && <span style={{ marginLeft: 8, fontSize: 11, padding: '2px 8px', borderRadius: 99, background: '#dbeafe', color: '#1e40af', fontWeight: 600 }}>해외 접수건만</span>}
+            {deptFilter === 'domestic' && <span style={{ marginLeft: 8, fontSize: 11, padding: '2px 8px', borderRadius: 99, background: '#dcfce7', color: '#166534', fontWeight: 600 }}>국내 접수건만</span>}
+          </div>
         </div>
         <div style={{ display: 'flex', gap: 8 }}>
           <button className="btn btn-ghost btn-sm" onClick={handleExport} disabled={filtered.length === 0}>📥 엑셀 저장</button>
