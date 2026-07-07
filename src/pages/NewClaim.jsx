@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useClaims } from '../context/ClaimsContext';
@@ -44,12 +44,19 @@ export default function NewClaim() {
   const { addClaim } = useClaims();
   const toast        = useToast();
   const navigate     = useNavigate();
-  const [form, setForm] = useState(() => ({
-    ...INITIAL,
-    sales_rep_dept: department || '',
-    sales_rep_name: displayName || '',
-  }));
+  const [form, setForm] = useState({ ...INITIAL });
   const [shipments, setShipments] = useState([EMPTY_SHIPMENT()]);
+
+  // 프로필 로드 후 부서·담당자 자동 세팅 (사용자가 직접 수정한 경우엔 덮어쓰지 않음)
+  useEffect(() => {
+    if (department || displayName) {
+      setForm(prev => ({
+        ...prev,
+        sales_rep_dept: prev.sales_rep_dept || department || '',
+        sales_rep_name: prev.sales_rep_name || displayName || '',
+      }));
+    }
+  }, [department, displayName]);
   const [submitting, setSub]                = useState(false);
   const [partSearchOpen,     setPartSearchOpen]     = useState(false);
   const [customerSearchOpen, setCustomerSearchOpen] = useState(false);
