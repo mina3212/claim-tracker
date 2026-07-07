@@ -459,7 +459,7 @@ export default function NewClaim() {
             }}
           >
             <input ref={photoRef} type="file" multiple accept="image/*" style={{ display: 'none' }}
-              onChange={e => { setClaimPhotos(prev => [...prev, ...Array.from(e.target.files)]); e.target.value = ''; }} />
+              onChange={e => { const files = Array.from(e.target.files || []); if (files.length > 0) setClaimPhotos(prev => [...prev, ...files]); }} />
             {claimPhotos.length === 0 ? (
               <div style={{ textAlign: 'center' }}>
                 <div style={{ fontSize: 24, marginBottom: 6 }}>📷</div>
