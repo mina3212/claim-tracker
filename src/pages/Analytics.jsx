@@ -1092,15 +1092,34 @@ export default function Analytics() {
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
               <div className="card">
                 <div className="card-title">📊 원인 분류별 비율</div>
-                <ResponsiveContainer width="100%" height={260}>
-                  <PieChart>
-                    <Pie data={causeAnalysis} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={90} innerRadius={55} paddingAngle={2}>
-                      {causeAnalysis.map((_, i) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}
-                    </Pie>
-                    <Tooltip formatter={(v, name) => [`${v}건`, name]} />
-                    <Legend iconSize={10} />
-                  </PieChart>
-                </ResponsiveContainer>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+                  <div style={{ flex: '0 0 200px', height: 220 }}>
+                    <ResponsiveContainer width="100%" height="100%">
+                      <PieChart>
+                        <Pie data={causeAnalysis} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={80} innerRadius={48} paddingAngle={2}>
+                          {causeAnalysis.map((_, i) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}
+                        </Pie>
+                        <Tooltip formatter={(v, name) => [`${v}건`, name]} />
+                      </PieChart>
+                    </ResponsiveContainer>
+                  </div>
+                  <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 10 }}>
+                    {(() => {
+                      const tot = causeAnalysis.reduce((s, x) => s + x.value, 0);
+                      return causeAnalysis.map((item, i) => {
+                        const pct = tot ? Math.round(item.value / tot * 100) : 0;
+                        return (
+                          <div key={item.name} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                            <span style={{ width: 10, height: 10, borderRadius: '50%', background: COLORS[i % COLORS.length], flexShrink: 0 }} />
+                            <span style={{ flex: 1, fontSize: 13 }}>{item.name}</span>
+                            <span style={{ fontSize: 13, fontWeight: 700 }}>{item.value}건</span>
+                            <span style={{ fontSize: 12, color: '#64748b', minWidth: 44, textAlign: 'right' }}>({pct}%)</span>
+                          </div>
+                        );
+                      });
+                    })()}
+                  </div>
+                </div>
               </div>
               <div className="card">
                 <div className="card-title">📋 원인별 집계</div>
@@ -1181,21 +1200,38 @@ export default function Analytics() {
             <div className="card-title">📍 단계별 진행 현황</div>
             {total === 0 ? (
               <div className="empty" style={{ padding: 40 }}>데이터 없음</div>
-            ) : (
-              <ResponsiveContainer width="100%" height={240}>
-                <PieChart>
-                  <Pie
-                    data={STAGES.map(s => ({ name: s, value: filteredClaims.filter(c => c.current_stage === s).length }))}
-                    dataKey="value" nameKey="name" cx="50%" cy="50%"
-                    outerRadius={90} innerRadius={55} paddingAngle={2}
-                  >
-                    {STAGES.map(s => <Cell key={s} fill={STAGE_COLORS[s]?.dot || '#94a3b8'} />)}
-                  </Pie>
-                  <Tooltip formatter={(v, name) => [v + '건', name]} />
-                  <Legend iconSize={10} />
-                </PieChart>
-              </ResponsiveContainer>
-            )}
+            ) : (() => {
+              const stageData = STAGES.map(s => ({ name: s, value: filteredClaims.filter(c => c.current_stage === s).length })).filter(d => d.value > 0);
+              const tot = stageData.reduce((s, x) => s + x.value, 0);
+              return (
+                <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+                  <div style={{ flex: '0 0 200px', height: 220 }}>
+                    <ResponsiveContainer width="100%" height="100%">
+                      <PieChart>
+                        <Pie data={stageData} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={80} innerRadius={48} paddingAngle={2}>
+                          {stageData.map(d => <Cell key={d.name} fill={STAGE_COLORS[d.name]?.dot || '#94a3b8'} />)}
+                        </Pie>
+                        <Tooltip formatter={(v, name) => [v + '건', name]} />
+                      </PieChart>
+                    </ResponsiveContainer>
+                  </div>
+                  <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 10 }}>
+                    {stageData.map(item => {
+                      const pct = tot ? Math.round(item.value / tot * 100) : 0;
+                      const color = STAGE_COLORS[item.name]?.dot || '#94a3b8';
+                      return (
+                        <div key={item.name} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                          <span style={{ width: 10, height: 10, borderRadius: '50%', background: color, flexShrink: 0 }} />
+                          <span style={{ flex: 1, fontSize: 13 }}>{item.name}</span>
+                          <span style={{ fontSize: 13, fontWeight: 700 }}>{item.value}건</span>
+                          <span style={{ fontSize: 12, color: '#64748b', minWidth: 44, textAlign: 'right' }}>({pct}%)</span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              );
+            })()}
           </div>
         </div>
       )}

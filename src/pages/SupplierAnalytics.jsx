@@ -75,6 +75,7 @@ export default function SupplierAnalytics() {
   const [periodType,  setPeriodType]  = useState('전체');
   const [selYear,     setSelYear]     = useState('');
   const [selPeriod,   setSelPeriod]   = useState('');
+  const [cardFilter,  setCardFilter]  = useState(null);
 
   useEffect(() => {
     let title = 'AJW 공급사 불량 분석';
@@ -127,6 +128,15 @@ export default function SupplierAnalytics() {
   const processed = filteredClaims.filter(c =>  c.disposition).length;
   const thisMonth = new Date().toISOString().slice(0, 7);
   const newThis   = filteredClaims.filter(c => (c.incoming_date || c.created_at || '').slice(0, 7) === thisMonth).length;
+
+  const cardClaims = useMemo(() => {
+    if (!cardFilter) return [];
+    if (cardFilter === 'all')       return [...filteredClaims].sort((a, b) => (b.incoming_date || '') > (a.incoming_date || '') ? 1 : -1);
+    if (cardFilter === 'pending')   return filteredClaims.filter(c => !c.disposition).sort((a, b) => (b.incoming_date || '') > (a.incoming_date || '') ? 1 : -1);
+    if (cardFilter === 'processed') return filteredClaims.filter(c =>  c.disposition).sort((a, b) => (b.incoming_date || '') > (a.incoming_date || '') ? 1 : -1);
+    if (cardFilter === 'newThis')   return filteredClaims.filter(c => (c.incoming_date || c.created_at || '').slice(0, 7) === thisMonth);
+    return [];
+  }, [cardFilter, filteredClaims, thisMonth]);
 
   /* 공급사별 */
   const supplierAnalysis = useMemo(() => {
@@ -307,19 +317,59 @@ export default function SupplierAnalytics() {
       </div>
 
       {/* KPI */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 12, marginBottom: 20 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 12, marginBottom: cardFilter ? 0 : 20 }}>
         {[
-          { label: '전체',       value: total,     color: '#0f172a' },
-          { label: '미결',       value: pending,   color: '#f59e0b' },
-          { label: '처리완료',   value: processed, color: '#10b981' },
-          { label: '이번달 신규', value: newThis,   color: '#3b82f6' },
-        ].map(item => (
-          <div key={item.label} className="card" style={{ textAlign: 'center' }}>
-            <div style={{ fontSize: 11, color: '#64748b', marginBottom: 6 }}>{item.label}</div>
-            <div style={{ fontSize: 28, fontWeight: 700, color: item.color }}>{item.value}건</div>
-          </div>
-        ))}
+          { key: 'all',       label: '전체',       value: total,     color: '#0f172a' },
+          { key: 'pending',   label: '미결',        value: pending,   color: '#f59e0b' },
+          { key: 'processed', label: '처리완료',    value: processed, color: '#10b981' },
+          { key: 'newThis',   label: '이번달 신규', value: newThis,   color: '#3b82f6' },
+        ].map(item => {
+          const isActive = cardFilter === item.key;
+          return (
+            <div key={item.key} className="card"
+              onClick={() => setCardFilter(prev => prev === item.key ? null : item.key)}
+              style={{ textAlign: 'center', cursor: 'pointer', transition: '.15s', outline: isActive ? `2px solid ${item.color}` : 'none', background: isActive ? item.color + '10' : '#fff', userSelect: 'none' }}>
+              <div style={{ fontSize: 11, color: '#64748b', marginBottom: 6 }}>{item.label}</div>
+              <div style={{ fontSize: 28, fontWeight: 700, color: item.color }}>{item.value}건</div>
+              <div style={{ fontSize: 10, color: '#94a3b8', marginTop: 4 }}>{isActive ? '▲ 닫기' : '클릭하여 보기'}</div>
+            </div>
+          );
+        })}
       </div>
+
+      {cardFilter && (
+        <div className="card" style={{ marginBottom: 20 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+            <div className="card-title" style={{ margin: 0 }}>
+              {{all:'전체', pending:'미결', processed:'처리완료', newThis:'이번달 신규'}[cardFilter]} 불량 ({cardClaims.length}건)
+            </div>
+            <button onClick={() => setCardFilter(null)} style={{ background: 'none', border: 'none', fontSize: 18, cursor: 'pointer', color: '#94a3b8' }}>✕</button>
+          </div>
+          {cardClaims.length === 0 ? (
+            <div className="empty" style={{ padding: 20 }}>해당 조건의 불량 이력이 없습니다</div>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6, maxHeight: 340, overflowY: 'auto' }}>
+              {cardClaims.map(c => {
+                const d = c.disposition || '미결';
+                const dc = DISPOSITION_COLORS[d] || DISPOSITION_COLORS['미결'];
+                return (
+                  <div key={c.id} onClick={() => navigate(`/supplier-claims/${c.id}`)}
+                    style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 12px', background: '#f8fafc', borderRadius: 8, cursor: 'pointer', border: '1px solid #e2e8f0' }}
+                    onMouseEnter={e => e.currentTarget.style.background = '#eff6ff'}
+                    onMouseLeave={e => e.currentTarget.style.background = '#f8fafc'}>
+                    <span style={{ fontSize: 10, padding: '2px 7px', borderRadius: 99, background: dc.bg, color: dc.text, fontWeight: 600, whiteSpace: 'nowrap' }}>{d}</span>
+                    <strong style={{ fontSize: 13, minWidth: 80 }}>{c.supplier_name || '-'}</strong>
+                    <span style={{ fontSize: 11, color: '#64748b', fontFamily: 'monospace' }}>{c.part_number || ''}</span>
+                    <span style={{ fontSize: 12, color: '#374151', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{c.part_name || ''}</span>
+                    <span style={{ fontSize: 11, color: '#94a3b8', whiteSpace: 'nowrap' }}>{c.incoming_date || ''}</span>
+                    <span style={{ color: '#94a3b8', fontSize: 11 }}>→</span>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      )}
 
       {/* 탭 */}
       <div style={{ display: 'flex', gap: 4, marginBottom: 16, flexWrap: 'wrap' }} className="no-print">
@@ -522,15 +572,34 @@ export default function SupplierAnalytics() {
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
               <div className="card">
                 <div className="card-title">📊 불량유형별 비율</div>
-                <ResponsiveContainer width="100%" height={280}>
-                  <PieChart>
-                    <Pie data={defectTypeAnalysis} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={95} innerRadius={55} paddingAngle={2}>
-                      {defectTypeAnalysis.map((_, i) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}
-                    </Pie>
-                    <Tooltip formatter={(v, name) => [`${v}건`, name]} />
-                    <Legend iconSize={10} />
-                  </PieChart>
-                </ResponsiveContainer>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+                  <div style={{ flex: '0 0 200px', height: 220 }}>
+                    <ResponsiveContainer width="100%" height="100%">
+                      <PieChart>
+                        <Pie data={defectTypeAnalysis} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={80} innerRadius={48} paddingAngle={2}>
+                          {defectTypeAnalysis.map((_, i) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}
+                        </Pie>
+                        <Tooltip formatter={(v, name) => [`${v}건`, name]} />
+                      </PieChart>
+                    </ResponsiveContainer>
+                  </div>
+                  <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 10 }}>
+                    {(() => {
+                      const tot = defectTypeAnalysis.reduce((s, x) => s + x.value, 0);
+                      return defectTypeAnalysis.map((item, i) => {
+                        const pct = tot ? Math.round(item.value / tot * 100) : 0;
+                        return (
+                          <div key={item.name} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                            <span style={{ width: 10, height: 10, borderRadius: '50%', background: COLORS[i % COLORS.length], flexShrink: 0 }} />
+                            <span style={{ flex: 1, fontSize: 13 }}>{item.name}</span>
+                            <span style={{ fontSize: 13, fontWeight: 700 }}>{item.value}건</span>
+                            <span style={{ fontSize: 12, color: '#64748b', minWidth: 44, textAlign: 'right' }}>({pct}%)</span>
+                          </div>
+                        );
+                      });
+                    })()}
+                  </div>
+                </div>
               </div>
               <div className="card">
                 <div className="card-title">📋 불량유형별 집계</div>
@@ -647,18 +716,38 @@ export default function SupplierAnalytics() {
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginBottom: 16 }}>
               <div className="card">
                 <div className="card-title">📊 처리결과 분포</div>
-                <ResponsiveContainer width="100%" height={280}>
-                  <PieChart>
-                    <Pie data={dispositionAnalysis} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={95} innerRadius={55} paddingAngle={2}>
-                      {dispositionAnalysis.map(d => {
-                        const dc = DISPOSITION_COLORS[d.name] || DISPOSITION_COLORS['미결'];
-                        return <Cell key={d.name} fill={dc.text} />;
-                      })}
-                    </Pie>
-                    <Tooltip formatter={(v, name) => [`${v}건`, name]} />
-                    <Legend iconSize={10} />
-                  </PieChart>
-                </ResponsiveContainer>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+                  <div style={{ flex: '0 0 200px', height: 220 }}>
+                    <ResponsiveContainer width="100%" height="100%">
+                      <PieChart>
+                        <Pie data={dispositionAnalysis} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={80} innerRadius={48} paddingAngle={2}>
+                          {dispositionAnalysis.map(d => {
+                            const dc = DISPOSITION_COLORS[d.name] || DISPOSITION_COLORS['미결'];
+                            return <Cell key={d.name} fill={dc.text} />;
+                          })}
+                        </Pie>
+                        <Tooltip formatter={(v, name) => [`${v}건`, name]} />
+                      </PieChart>
+                    </ResponsiveContainer>
+                  </div>
+                  <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 10 }}>
+                    {(() => {
+                      const tot = dispositionAnalysis.reduce((s, x) => s + x.value, 0);
+                      return dispositionAnalysis.map(item => {
+                        const pct = tot ? Math.round(item.value / tot * 100) : 0;
+                        const dc = DISPOSITION_COLORS[item.name] || DISPOSITION_COLORS['미결'];
+                        return (
+                          <div key={item.name} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                            <span style={{ width: 10, height: 10, borderRadius: '50%', background: dc.text, flexShrink: 0 }} />
+                            <span style={{ flex: 1, fontSize: 13 }}>{item.name}</span>
+                            <span style={{ fontSize: 13, fontWeight: 700 }}>{item.value}건</span>
+                            <span style={{ fontSize: 12, color: '#64748b', minWidth: 44, textAlign: 'right' }}>({pct}%)</span>
+                          </div>
+                        );
+                      });
+                    })()}
+                  </div>
+                </div>
               </div>
               <div className="card">
                 <div className="card-title">📋 처리결과 집계</div>
@@ -739,18 +828,38 @@ export default function SupplierAnalytics() {
           {dispositionAnalysis.length > 0 && (
             <div className="card">
               <div className="card-title">📍 처리결과 현황</div>
-              <ResponsiveContainer width="100%" height={240}>
-                <PieChart>
-                  <Pie data={dispositionAnalysis} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={90} innerRadius={55} paddingAngle={2}>
-                    {dispositionAnalysis.map(d => {
-                      const dc = DISPOSITION_COLORS[d.name] || DISPOSITION_COLORS['미결'];
-                      return <Cell key={d.name} fill={dc.text} />;
-                    })}
-                  </Pie>
-                  <Tooltip formatter={(v, name) => [v + '건', name]} />
-                  <Legend iconSize={10} />
-                </PieChart>
-              </ResponsiveContainer>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+                <div style={{ flex: '0 0 200px', height: 220 }}>
+                  <ResponsiveContainer width="100%" height="100%">
+                    <PieChart>
+                      <Pie data={dispositionAnalysis} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={80} innerRadius={48} paddingAngle={2}>
+                        {dispositionAnalysis.map(d => {
+                          const dc = DISPOSITION_COLORS[d.name] || DISPOSITION_COLORS['미결'];
+                          return <Cell key={d.name} fill={dc.text} />;
+                        })}
+                      </Pie>
+                      <Tooltip formatter={(v, name) => [v + '건', name]} />
+                    </PieChart>
+                  </ResponsiveContainer>
+                </div>
+                <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 10 }}>
+                  {(() => {
+                    const tot = dispositionAnalysis.reduce((s, x) => s + x.value, 0);
+                    return dispositionAnalysis.map(item => {
+                      const pct = tot ? Math.round(item.value / tot * 100) : 0;
+                      const dc = DISPOSITION_COLORS[item.name] || DISPOSITION_COLORS['미결'];
+                      return (
+                        <div key={item.name} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                          <span style={{ width: 10, height: 10, borderRadius: '50%', background: dc.text, flexShrink: 0 }} />
+                          <span style={{ flex: 1, fontSize: 13 }}>{item.name}</span>
+                          <span style={{ fontSize: 13, fontWeight: 700 }}>{item.value}건</span>
+                          <span style={{ fontSize: 12, color: '#64748b', minWidth: 44, textAlign: 'right' }}>({pct}%)</span>
+                        </div>
+                      );
+                    });
+                  })()}
+                </div>
+              </div>
             </div>
           )}
         </div>
