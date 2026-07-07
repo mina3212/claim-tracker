@@ -905,7 +905,8 @@ export default function ClaimDetail() {
           <div className="timeline">
             {history.map((entry, i) => {
               const sc = STAGE_COLORS[entry.stage_name] || { dot: '#94a3b8' };
-              const displayName = entry.user_name || entry.user_email || entry.handler || '';
+              // handler(담당자 입력값)를 우선, 없으면 실제 로그인 계정명
+              const displayName = entry.handler || entry.user_name || entry.user_email || '';
               const isEditing = editingEntryId === entry.id;
               return (
                 <div key={entry.id || i} className="tl-item">
@@ -975,7 +976,7 @@ export default function ClaimDetail() {
                           <div className="tl-handler">
                             👤 {entry.handler_dept && <span style={{ fontSize: 11, background: '#f1f5f9', color: '#475569', padding: '1px 6px', borderRadius: 4, marginRight: 4 }}>{entry.handler_dept}</span>}
                             {displayName}
-                            {entry.user_email && entry.user_name && (
+                            {false && (
                               <span style={{ color: '#94a3b8', marginLeft: 4 }}>({entry.user_email})</span>
                             )}
                           </div>
