@@ -233,42 +233,48 @@ export default function NewClaim() {
             </div>
           </div>
 
-          {/* 출하 차수 목록 */}
-          <div style={{ marginTop: 16 }}>
-            <div style={{ fontSize: 12, fontWeight: 700, color: '#64748b', marginBottom: 8, textTransform: 'uppercase', letterSpacing: .5 }}>
-              출하 내역 <span style={{ color: '#ef4444' }}>*</span>
-              {totalQty > 0 && <span style={{ marginLeft: 8, fontSize: 12, color: '#0f172a', fontWeight: 600, textTransform: 'none' }}>합계: {totalQty.toLocaleString()} EA</span>}
+          <div className="form-grid form-cols-4" style={{ marginTop: 8 }}>
+            {/* 출하 내역 헤더 */}
+            <div className="form-group form-span-4" style={{ marginBottom: 0 }}>
+              <label>
+                출하 내역 <span className="required-star">*</span>
+                {totalQty > 0 && <span style={{ marginLeft: 10, fontSize: 12, fontWeight: 600, color: '#0f172a' }}>합계 {totalQty.toLocaleString()} EA</span>}
+              </label>
             </div>
+
+            {/* 출하 차수 행들 */}
             {shipments.map((s, i) => (
-              <div key={i} style={{ display: 'grid', gridTemplateColumns: '160px 140px 1fr auto', gap: 8, marginBottom: 8, alignItems: 'end' }}>
-                <div>
-                  {i === 0 && <label style={{ fontSize: 11, color: '#94a3b8', fontWeight: 600, display: 'block', marginBottom: 3 }}>출하일자</label>}
+              <div key={i} className="form-span-4" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr auto', gap: 8, alignItems: 'end', marginBottom: 6 }}>
+                <div className="form-group" style={{ margin: 0 }}>
+                  {i === 0 && <label style={{ fontSize: 11 }}>출하일자</label>}
                   <input type="date" value={s.shipping_date} onChange={setShipmentVal(i, 'shipping_date')} />
                 </div>
-                <div>
-                  {i === 0 && <label style={{ fontSize: 11, color: '#94a3b8', fontWeight: 600, display: 'block', marginBottom: 3 }}>출고 수량 (EA) <span style={{ color: '#ef4444' }}>*</span></label>}
+                <div className="form-group" style={{ margin: 0 }}>
+                  {i === 0 && <label style={{ fontSize: 11 }}>출고 수량 (EA) <span className="required-star">*</span></label>}
                   <input type="number" min="0" placeholder="0" value={s.quantity} onChange={setShipmentVal(i, 'quantity')} />
                 </div>
-                <div>
-                  {i === 0 && <label style={{ fontSize: 11, color: '#94a3b8', fontWeight: 600, display: 'block', marginBottom: 3 }}>LOT 번호 <span style={{ color: '#ef4444' }}>*</span></label>}
+                <div className="form-group" style={{ margin: 0 }}>
+                  {i === 0 && <label style={{ fontSize: 11 }}>LOT 번호 <span className="required-star">*</span></label>}
                   <input placeholder="LOT 번호" value={s.lot_number} onChange={setShipmentVal(i, 'lot_number')} />
                 </div>
-                <div style={{ paddingBottom: 1 }}>
-                  {i === 0 && <div style={{ height: 18, marginBottom: 3 }} />}
-                  {shipments.length > 1 ? (
-                    <button type="button" onClick={() => removeShipment(i)}
-                      style={{ padding: '7px 10px', borderRadius: 7, border: '1px solid #fca5a5', background: '#fff', color: '#dc2626', cursor: 'pointer', fontSize: 14, lineHeight: 1 }}>✕</button>
-                  ) : <div style={{ width: 36 }} />}
+                <div style={{ paddingBottom: 2 }}>
+                  {i === 0 && <div style={{ height: 22 }} />}
+                  {shipments.length > 1
+                    ? <button type="button" onClick={() => removeShipment(i)} style={{ padding: '7px 10px', borderRadius: 7, border: '1px solid #fca5a5', background: '#fff', color: '#dc2626', cursor: 'pointer', fontSize: 13 }}>✕</button>
+                    : <div style={{ width: 36 }} />}
                 </div>
               </div>
             ))}
-            <button type="button" onClick={addShipment}
-              style={{ marginTop: 4, padding: '6px 14px', borderRadius: 8, border: '1.5px dashed #cbd5e1', background: '#f8fafc', color: '#64748b', fontSize: 12, fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4 }}>
-              ＋ 출하 차수 추가
-            </button>
+
+            <div className="form-span-4">
+              <button type="button" onClick={addShipment}
+                style={{ padding: '6px 16px', borderRadius: 8, border: '1.5px dashed #cbd5e1', background: '#f8fafc', color: '#64748b', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>
+                ＋ 출하 차수 추가
+              </button>
+            </div>
           </div>
 
-          <div className="form-grid form-cols-4" style={{ marginTop: 16 }}>
+          <div className="form-grid form-cols-4" style={{ marginTop: 8 }}>
             <div className="form-group form-span-4">
               <label>품목 유형 <span className="required-star">*</span></label>
               <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
