@@ -79,6 +79,19 @@ export default function ClaimList() {
     '기타':       { bg: '#f1f5f9', text: '#475569' },
   };
 
+  // 불량증상만 추출 (새 포맷: [불량증상]\n... / 구형: 그대로)
+  const extractSymptom = (desc) => {
+    if (!desc) return '';
+    if (desc.includes('[불량증상]')) {
+      const m = desc.match(/\[불량증상\]\n([\s\S]*?)(?=\n\n\[|$)/);
+      return m ? m[1].trim() : desc;
+    }
+    return desc;
+  };
+
+  // 기타(상세내용) → 기타
+  const displayCause = (cause) => cause.startsWith('기타') ? '기타' : cause;
+
   // 부서별 접근 범위: 마케팅팀 = 해외만 / 영업·영업관리 = 해외 제외 / 나머지(품질기술팀·관리자) = 전체
   const deptFilter = useMemo(() => {
     if (isAdmin || department === '품질기술팀') return 'all';
@@ -208,21 +221,19 @@ export default function ClaimList() {
           </div>
         ) : (
           <div className="table-wrap">
-            <table>
+            <table style={{ fontSize: 12 }}>
               <thead>
                 <tr>
-                  <th style={{ width: 28 }}></th>
-                  <th>접수일</th>
-                  <th>고객사</th>
-                  <th>품번</th>
-                  <th>품명</th>
-                  <th>수량</th>
-                  <th>LOT</th>
+                  <th style={{ width: 24, padding: '8px 4px' }}></th>
+                  <th style={{ width: 82, whiteSpace: 'nowrap' }}>접수일</th>
+                  <th style={{ width: 110 }}>고객사</th>
+                  <th style={{ width: 100 }}>품번</th>
+                  <th style={{ width: 130 }}>품명</th>
                   <th>불량내용</th>
-                  <th>불량원인</th>
-                  <th>현재 단계</th>
-                  <th>영업담당</th>
-                  {user && <th></th>}
+                  <th style={{ width: 110 }}>불량원인</th>
+                  <th style={{ width: 88, whiteSpace: 'nowrap' }}>현재단계</th>
+                  <th style={{ width: 68, whiteSpace: 'nowrap' }}>담당자</th>
+                  {user && <th style={{ width: 44 }}></th>}
                 </tr>
               </thead>
               <tbody>
@@ -230,42 +241,42 @@ export default function ClaimList() {
                   const stage = c.current_stage;
                   const dotStatus = stage === '종결' ? 'done'
                     : stage === '접수' ? 'new' : 'progress';
+                  const symptom = extractSymptom(c.defect_description);
                   return (
                   <tr key={c.id} className="clickable" onClick={() => navigate(`/claims/${c.id}`)}>
-                    <td style={{ textAlign: 'center', paddingRight: 0 }}>
+                    <td style={{ textAlign: 'center', padding: '0 4px' }}>
                       <StatusDot status={dotStatus} />
                     </td>
-                    <td style={{ whiteSpace: 'nowrap' }}>{c.receipt_date || '-'}</td>
-                    <td>
-                      <strong>{c.customer_name}</strong>
+                    <td style={{ whiteSpace: 'nowrap', fontSize: 11, color: '#64748b' }}>{c.receipt_date || '-'}</td>
+                    <td style={{ maxWidth: 110, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      <strong style={{ fontSize: 12 }}>{c.customer_name}</strong>
                       {isAdmin && pendingIds.has(c.id) && (
-                        <span title="삭제 요청 대기중" style={{ marginLeft: 6, fontSize: 11, color: '#f59e0b' }}>⚠️</span>
+                        <span title="삭제 요청 대기중" style={{ marginLeft: 4, fontSize: 11, color: '#f59e0b' }}>⚠️</span>
                       )}
                     </td>
-                    <td className="mono">{c.part_number || '-'}</td>
-                    <td>{c.part_name || '-'}</td>
-                    <td style={{ textAlign: 'right' }}>
-                      {c.quantity != null ? Number(c.quantity).toLocaleString() : '-'}
+                    <td className="mono" style={{ fontSize: 11, maxWidth: 100, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
+                        title={c.part_number}>{c.part_number || '-'}</td>
+                    <td style={{ maxWidth: 130, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: 12 }}
+                        title={c.part_name}>{c.part_name || '-'}</td>
+                    <td style={{ maxWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
+                        title={symptom}>
+                      <span style={{ fontSize: 12, color: '#374151' }}>{symptom || '-'}</span>
                     </td>
-                    <td className="mono">{c.lot_number || '-'}</td>
-                    <td style={{ maxWidth: 140, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
-                        title={c.defect_description}>
-                      {c.defect_description || '-'}
-                    </td>
-                    <td style={{ minWidth: 80 }}>
+                    <td style={{ minWidth: 0 }}>
                       {(causeMap[c.id] || []).map(cause => {
-                        const col = CAUSE_COLORS[cause] || CAUSE_COLORS['기타'];
+                        const key = displayCause(cause);
+                        const col = CAUSE_COLORS[key] || CAUSE_COLORS['기타'];
                         return (
-                          <span key={cause} style={{ display: 'inline-block', fontSize: 10, padding: '1px 6px', borderRadius: 99, background: col.bg, color: col.text, fontWeight: 600, marginRight: 3, marginBottom: 2, whiteSpace: 'nowrap' }}>
-                            {cause}
+                          <span key={cause} style={{ display: 'inline-block', fontSize: 10, padding: '1px 5px', borderRadius: 99, background: col.bg, color: col.text, fontWeight: 600, marginRight: 2, marginBottom: 2, whiteSpace: 'nowrap' }}>
+                            {key}
                           </span>
                         );
                       })}
                     </td>
                     <td><StageBadge stage={c.current_stage} size="sm" /></td>
-                    <td>{c.sales_rep_name || '-'}</td>
+                    <td style={{ fontSize: 11, whiteSpace: 'nowrap', color: '#475569' }}>{c.sales_rep_name || '-'}</td>
                     {isAdmin && (
-                      <td onClick={e => e.stopPropagation()}>
+                      <td onClick={e => e.stopPropagation()} style={{ padding: '0 4px' }}>
                         <button
                           className="btn btn-danger btn-icon btn-sm"
                           title="삭제"
@@ -274,12 +285,12 @@ export default function ClaimList() {
                       </td>
                     )}
                     {user && !isAdmin && (
-                      <td onClick={e => e.stopPropagation()}>
+                      <td onClick={e => e.stopPropagation()} style={{ padding: '0 4px' }}>
                         <button
                           className="btn btn-sm"
                           title="삭제 요청"
                           onClick={e => openDeleteRequest(e, c.id, c.customer_name)}
-                          style={{ fontSize: 11, color: '#c2410c', background: '#fff7ed', border: '1px solid #fed7aa', whiteSpace: 'nowrap' }}
+                          style={{ fontSize: 10, color: '#c2410c', background: '#fff7ed', border: '1px solid #fed7aa', whiteSpace: 'nowrap', padding: '3px 6px' }}
                         >
                           삭제요청
                         </button>
