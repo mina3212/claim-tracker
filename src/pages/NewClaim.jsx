@@ -29,11 +29,15 @@ const INITIAL = {
 };
 
 export default function NewClaim() {
-  const { user }     = useAuth();
+  const { user, displayName, department } = useAuth();
   const { addClaim } = useClaims();
   const toast        = useToast();
   const navigate     = useNavigate();
-  const [form, setForm]                     = useState(INITIAL);
+  const [form, setForm] = useState(() => ({
+    ...INITIAL,
+    sales_rep_dept: department || '',
+    sales_rep_name: displayName || '',
+  }));
   const [submitting, setSub]                = useState(false);
   const [partSearchOpen,     setPartSearchOpen]     = useState(false);
   const [customerSearchOpen, setCustomerSearchOpen] = useState(false);

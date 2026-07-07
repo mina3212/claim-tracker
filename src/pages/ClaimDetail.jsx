@@ -56,7 +56,7 @@ export default function ClaimDetail() {
   const { id }   = useParams();
   const navigate = useNavigate();
   const { claims, loading, getStagesFor, updateClaimStage, updateClaimData, removeClaim, deleteRequests, addDeleteRequest, resolveRequest, patchStageEntry } = useClaims();
-  const { user, isAdmin } = useAuth();
+  const { user, isAdmin, displayName, department } = useAuth();
   const toast = useToast();
 
   const [notifyEmails, setNotifyEmails] = useState([]);
@@ -66,8 +66,8 @@ export default function ClaimDetail() {
 
   /* ── 단계 진행 공통 상태 ── */
   const [advDate,        setAdvDate]        = useState(new Date().toISOString().slice(0, 10));
-  const [advHandlerDept, setAdvHandlerDept] = useState('');
-  const [advHandler,     setAdvHandler]     = useState('');
+  const [advHandlerDept, setAdvHandlerDept] = useState(department || '');
+  const [advHandler,     setAdvHandler]     = useState(displayName || '');
   const [advDesc,        setAdvDesc]        = useState('');
   const [advancing,      setAdvancing]      = useState(false);
 
@@ -193,8 +193,8 @@ export default function ClaimDetail() {
       );
       updateClaimStage(id, ns, entry);
       setAdvDesc('');
-      setAdvHandler('');
-      setAdvHandlerDept('');
+      setAdvHandler(displayName || '');
+      setAdvHandlerDept(department || '');
       setSelectedCauses([]);
       setEtcDetail('');
       setAnalysisDetail('');
