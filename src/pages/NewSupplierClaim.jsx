@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useSupplierClaims } from '../context/SupplierClaimsContext';
@@ -52,7 +52,7 @@ const INITIAL = {
 };
 
 export default function NewSupplierClaim() {
-  const { user }     = useAuth();
+  const { user, displayName } = useAuth();
   const { addClaim } = useSupplierClaims();
   const toast        = useToast();
   const navigate     = useNavigate();
@@ -63,6 +63,13 @@ export default function NewSupplierClaim() {
   const [partSearchOpen, setPartSearchOpen]     = useState(false);
   const [supplierSearchOpen, setSupplierSearch] = useState(false);
   const fileRef = useRef(null);
+
+  const INSPECTORS = ['권순규', '김민아', '민영재', '오은세', '윤창준', '최용민'];
+
+  useEffect(() => {
+    if (!displayName) return;
+    setForm(prev => ({ ...prev, handler_name: prev.handler_name || displayName }));
+  }, [displayName]);
 
   const addFiles = (selected) => {
     const valid = [...selected].filter(f => f.size <= 20 * 1024 * 1024);
@@ -208,8 +215,16 @@ export default function NewSupplierClaim() {
             </div>
             <div className="form-group" />
             <div className="form-group">
-              <label>담당자</label>
-              <input placeholder="검사 담당자 이름" value={form.handler_name} onChange={set('handler_name')} />
+              <label>검사자</label>
+              <input
+                list="inspectors-list"
+                placeholder="검사 담당자 이름"
+                value={form.handler_name}
+                onChange={set('handler_name')}
+              />
+              <datalist id="inspectors-list">
+                {INSPECTORS.map(n => <option key={n} value={n} />)}
+              </datalist>
             </div>
 
           </div>

@@ -17,7 +17,6 @@ const INITIAL = {
   receipt_date:        today(),
   sales_rep_dept:      '',
   sales_rep_name:      '',
-  sales_rep_contact:   '',
   part_number:         '',
   part_name:           '',
   product_type:        '',
@@ -92,7 +91,6 @@ export default function NewClaim() {
     if (!form.occurrence_date)         { toast('입력 오류', '발생일을 선택하세요', 'error'); return; }
     if (!form.sales_rep_dept)           { toast('입력 오류', '영업담당자 부서를 선택하세요', 'error'); return; }
     if (!form.sales_rep_name)          { toast('입력 오류', '영업담당자를 선택하세요', 'error'); return; }
-    if (!form.sales_rep_contact.trim()){ toast('입력 오류', '담당자 연락처를 입력하세요', 'error'); return; }
 
     if (!form.part_number.trim())      { toast('입력 오류', '품번을 입력하세요', 'error'); return; }
     if (!form.part_name.trim())        { toast('입력 오류', '품명을 입력하세요', 'error'); return; }
@@ -126,7 +124,6 @@ export default function NewClaim() {
         defect_description:  buildDefectDescription(form.defect_symptom, form.defect_situation, form.customer_request),
         sales_rep_dept:      form.sales_rep_dept || null,
         sales_rep_name:      form.sales_rep_name,
-        sales_rep_contact:   form.sales_rep_contact.trim(),
         part_number:         form.part_number.trim(),
         part_name:           form.part_name.trim(),
         lot_number:          lotNumbers,
@@ -216,10 +213,6 @@ export default function NewClaim() {
               <datalist id="sales-reps-list">
                 {SALES_REPS.map(n => <option key={n} value={n} />)}
               </datalist>
-            </div>
-            <div className="form-group">
-              <label>담당자 연락처 <span className="required-star">*</span></label>
-              <input placeholder="010-0000-0000" value={form.sales_rep_contact} onChange={set('sales_rep_contact')} required />
             </div>
           </div>
         </div>
