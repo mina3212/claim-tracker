@@ -4,7 +4,7 @@
 
 body {
   /* Inter = Helvetica 대체 웹폰트 (Windows/Linux 호환), 한글은 Nanum Gothic */
-  font-family: 'Inter', 'Nanum Gothic', sans-serif;
+  font-family: 'Inter', 'Nanum Gothic', 'Segoe UI Emoji', 'Apple Color Emoji', 'Noto Color Emoji', sans-serif;
   background: #f1f5f9;
   color: #1e293b;
   -webkit-font-smoothing: antialiased;
