@@ -1,10 +1,12 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Outlet, NavLink, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { signOut, canViewSupplierClaims } from '../lib/supabase';
 import { useToast } from '../context/ToastContext';
 import { usePresence } from '../hooks/usePresence';
 import { usePrintTitle } from '../context/PrintContext';
+import { useClaims } from '../context/ClaimsContext';
+import ClaimNotificationPopup from './ClaimNotificationPopup';
 
 const DEPT_COLORS = {
   '영업팀':    { bg: '#dbeafe', text: '#1e40af' },
@@ -22,6 +24,9 @@ export default function Layout() {
   const toast = useToast();
   const navigate = useNavigate();
   const onlineUsers = usePresence(user, displayName, department);
+  const { notifications, dismissNotification, setCurrentUser } = useClaims();
+
+  useEffect(() => { if (user?.id) setCurrentUser(user.id); }, [user, setCurrentUser]);
 
   const [editingName, setEditingName] = useState(false);
   const [nameInput,   setNameInput]   = useState('');
@@ -304,6 +309,8 @@ export default function Layout() {
 
         <Outlet />
       </main>
+
+      <ClaimNotificationPopup notifications={notifications} onDismiss={dismissNotification} />
     </div>
   );
 }

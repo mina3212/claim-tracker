@@ -1,5 +1,5 @@
-import { createContext, useContext, useState, useEffect, useCallback } from 'react';
-import { fetchClaims, fetchAllStages, fetchDeleteRequests } from '../lib/supabase';
+import { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
+import { fetchClaims, fetchAllStages, fetchDeleteRequests, sb } from '../lib/supabase';
 
 const ClaimsCtx = createContext(null);
 
@@ -7,8 +7,10 @@ export function ClaimsProvider({ children }) {
   const [claims,         setClaims]         = useState([]);
   const [stages,         setStages]         = useState([]);
   const [deleteRequests, setDeleteRequests] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [dbReady, setDbReady] = useState(true);
+  const [loading,       setLoading]       = useState(true);
+  const [dbReady,       setDbReady]       = useState(true);
+  const [notifications, setNotifications] = useState([]);
+  const currentUserRef = useRef(null);
 
   const refresh = useCallback(async () => {
     setLoading(true);
@@ -30,6 +32,24 @@ export function ClaimsProvider({ children }) {
   }, []);
 
   useEffect(() => { refresh(); }, [refresh]);
+
+  // Realtime 구독 — 다른 사용자가 접수한 클레임 알림
+  useEffect(() => {
+    const channel = sb
+      .channel('claims-insert')
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'claims' }, (payload) => {
+        const newClaim = payload.new;
+        // 내가 방금 접수한 건은 제외 (created_by 비교)
+        if (newClaim.created_by && currentUserRef.current && newClaim.created_by === currentUserRef.current) return;
+        setClaims(prev => {
+          if (prev.some(c => c.id === newClaim.id)) return prev;
+          return [newClaim, ...prev];
+        });
+        setNotifications(prev => [...prev, newClaim]);
+      })
+      .subscribe();
+    return () => { sb.removeChannel(channel); };
+  }, []);
 
   const getStagesFor = useCallback(
     (claimId) => stages.filter(s => s.claim_id === claimId).sort((a, b) => a.created_at.localeCompare(b.created_at)),
@@ -68,11 +88,18 @@ export function ClaimsProvider({ children }) {
     setStages(prev => prev.map(s => s.id === id ? { ...s, ...data } : s));
   }, []);
 
+  const dismissNotification = useCallback((id) => {
+    setNotifications(prev => prev.filter(n => n.id !== id));
+  }, []);
+
+  const setCurrentUser = useCallback((uid) => { currentUserRef.current = uid; }, []);
+
   return (
     <ClaimsCtx.Provider value={{
-      claims, stages, deleteRequests, loading, dbReady,
+      claims, stages, deleteRequests, loading, dbReady, notifications,
       refresh, getStagesFor, addClaim, updateClaimStage, updateClaimData,
       removeClaim, addDeleteRequest, resolveRequest, patchStageEntry,
+      dismissNotification, setCurrentUser,
     }}>
       {children}
     </ClaimsCtx.Provider>
