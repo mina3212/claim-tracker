@@ -121,9 +121,11 @@ export default function Layout() {
           <div style={{ fontSize: 10, color: '#94a3b8', fontWeight: 700, letterSpacing: .8, padding: '10px 14px 4px', textTransform: 'uppercase' }}>
             기타
           </div>
+          {isAdmin && (
           <NavLink to="/parts" className={({ isActive }) => `nav-item${isActive ? ' active' : ''}`}>
             <span>🔩</span> 품번 관리
           </NavLink>
+          )}
           {isAdmin && (
             <NavLink to="/suppliers" className={({ isActive }) => `nav-item${isActive ? ' active' : ''}`}>
               <span>🏭</span> 공급사 관리
