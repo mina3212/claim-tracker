@@ -345,7 +345,7 @@ export default function ClaimDetail() {
         const newImgs = await uploadAllEntry(entryEditFiles);
         const allImgs = [...entryEditExistingImgs, ...newImgs];
         if (allImgs.length) {
-          description = description.replace(/\n\n\[imgs\] \[.*\]$/s, '') + `\n\n[imgs] ${JSON.stringify(allImgs)}`;
+          description = description.replace(/\n+\[imgs\] \[.*\]$/s, '') + `\n[imgs] ${JSON.stringify(allImgs)}`;
         }
       }
 
@@ -1196,10 +1196,10 @@ export default function ClaimDetail() {
                               setEntryEditMode(entry.stage_name === '조치' ? 'action' : 'raw');
                               setEntryEditCauses([]);
                               let existingImgs = [];
-                              const im = desc.match(/\n\n\[imgs\] (\[.*\])$/s);
+                              const im = desc.match(/\n+\[imgs\] (\[.*\])$/s);
                               if (im) { try { existingImgs = JSON.parse(im[1]); } catch {} }
                               setEntryEditExistingImgs(existingImgs);
-                              setEntryEdit({ stage_date: entry.stage_date || '', description: desc.replace(/\n\n\[imgs\] \[.*\]$/s, ''), handler: entry.handler || '', handler_dept: entry.handler_dept || '' });
+                              setEntryEdit({ stage_date: entry.stage_date || '', description: desc.replace(/\n+\[imgs\] \[.*\]$/s, ''), handler: entry.handler || '', handler_dept: entry.handler_dept || '' });
                             }
                           }}
                         >✏️ 수정</button>
