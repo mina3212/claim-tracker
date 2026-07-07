@@ -196,8 +196,26 @@ export default function ClaimReport() {
             </tr>
             <tr>
               <td className="rpt-td-lbl" style={{ verticalAlign: 'top' }}>불량 내용</td>
-              <td className="rpt-td-val" colSpan={3} style={{ whiteSpace: 'pre-wrap', lineHeight: 1.5 }}>
-                {claim.defect_description || '-'}
+              <td className="rpt-td-val" colSpan={3} style={{ lineHeight: 1.5 }}>
+                {(() => {
+                  const desc = claim.defect_description || '';
+                  let imgs = [];
+                  const m = desc.match(/\n\n\[imgs\] (\[.*\])$/s);
+                  if (m) { try { imgs = JSON.parse(m[1]); } catch {} }
+                  const textPart = desc.replace(/\n\n\[imgs\] \[.*\]$/s, '');
+                  return (
+                    <>
+                      <div style={{ whiteSpace: 'pre-wrap' }}>{textPart || '-'}</div>
+                      {imgs.length > 0 && (
+                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginTop: 6 }}>
+                          {imgs.map((url, i) => (
+                            <img key={i} src={url} alt="" style={{ width: 70, height: 70, objectFit: 'cover', borderRadius: 4, border: '1px solid #e2e8f0' }} />
+                          ))}
+                        </div>
+                      )}
+                    </>
+                  );
+                })()}
               </td>
             </tr>
           </tbody>

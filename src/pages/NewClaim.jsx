@@ -1,9 +1,9 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useClaims } from '../context/ClaimsContext';
 import { useToast } from '../context/ToastContext';
-import { insertClaim, CUSTOMER_GROUPS, PRODUCT_TYPES, PRODUCT_CATEGORIES, SALES_DEPTS, SALES_REPS, SHIPPING_WAREHOUSES } from '../lib/supabase';
+import { insertClaim, updateClaim, uploadStageImage, CUSTOMER_GROUPS, PRODUCT_TYPES, PRODUCT_CATEGORIES, SALES_DEPTS, SALES_REPS, SHIPPING_WAREHOUSES } from '../lib/supabase';
 import PartSearchModal from '../components/PartSearchModal';
 import CustomerSearchModal from '../components/CustomerSearchModal';
 import Tooltip from '../components/Tooltip';
@@ -59,6 +59,9 @@ export default function NewClaim() {
     }));
   }, [department, displayName]);
   const [submitting, setSub]                = useState(false);
+  const [claimPhotos, setClaimPhotos]       = useState([]);
+  const [photoDragging, setPhotoDragging]   = useState(false);
+  const photoRef = useRef(null);
   const [partSearchOpen,     setPartSearchOpen]     = useState(false);
   const [customerSearchOpen, setCustomerSearchOpen] = useState(false);
 
@@ -135,7 +138,20 @@ export default function NewClaim() {
         receipt_date:        form.receipt_date || null,
       };
       const { claim, firstEntry } = await insertClaim(payload, user);
-      addClaim(claim, firstEntry);
+      // 사진 업로드 후 defect_description에 [imgs] 추가
+      let finalClaim = claim;
+      if (claimPhotos.length > 0) {
+        const urls = [];
+        for (const f of claimPhotos) {
+          try { urls.push(await uploadStageImage(f, claim.id)); } catch (e) { toast('사진 업로드 실패', e.message, 'error'); }
+        }
+        if (urls.length > 0) {
+          const newDesc = (claim.defect_description || '') + `\n\n[imgs] ${JSON.stringify(urls)}`;
+          await updateClaim(claim.id, { defect_description: newDesc });
+          finalClaim = { ...claim, defect_description: newDesc };
+        }
+      }
+      addClaim(finalClaim, firstEntry);
       toast('클레임 접수 완료', `${form.customer_name} 클레임이 등록되었습니다`, 'success');
       navigate(`/claims/${claim.id}`);
     } catch (err) {
@@ -424,9 +440,57 @@ export default function NewClaim() {
           </div>
         </div>
 
+        {/* 사진 첨부 */}
+        <div className="form-card" style={{ marginTop: 16 }}>
+          <div className="form-card-title">📷 사진 첨부 <span style={{ fontSize: 11, color: '#94a3b8', fontWeight: 400 }}>(불량 현장 사진 등 · 선택 · 여러 장 가능)</span></div>
+          <div
+            onDragOver={e => { e.preventDefault(); setPhotoDragging(true); }}
+            onDragLeave={() => setPhotoDragging(false)}
+            onDrop={e => {
+              e.preventDefault(); setPhotoDragging(false);
+              const files = [...e.dataTransfer.files].filter(f => f.type.startsWith('image/'));
+              setClaimPhotos(prev => [...prev, ...files]);
+            }}
+            onClick={() => photoRef.current?.click()}
+            style={{
+              border: `2px dashed ${photoDragging ? '#3b82f6' : '#e2e8f0'}`,
+              borderRadius: 10, padding: claimPhotos.length ? '12px 16px' : '24px 16px',
+              cursor: 'pointer', background: photoDragging ? '#eff6ff' : '#f8fafc', transition: '.15s',
+            }}
+          >
+            <input ref={photoRef} type="file" multiple accept="image/*" style={{ display: 'none' }}
+              onChange={e => { setClaimPhotos(prev => [...prev, ...Array.from(e.target.files)]); e.target.value = ''; }} />
+            {claimPhotos.length === 0 ? (
+              <div style={{ textAlign: 'center' }}>
+                <div style={{ fontSize: 24, marginBottom: 6 }}>📷</div>
+                <div style={{ fontSize: 13, color: '#64748b', fontWeight: 600 }}>사진을 드래그하거나 클릭하여 첨부</div>
+                <div style={{ fontSize: 11, color: '#94a3b8', marginTop: 4 }}>JPG, PNG, GIF, WEBP · 여러 장 가능</div>
+              </div>
+            ) : (
+              <div>
+                <div style={{ fontSize: 12, fontWeight: 700, color: '#0f172a', marginBottom: 8 }}>첨부 예정 사진 ({claimPhotos.length}장) · 클릭하여 추가</div>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+                  {claimPhotos.map((f, i) => {
+                    const url = URL.createObjectURL(f);
+                    return (
+                      <div key={i} style={{ position: 'relative' }}>
+                        <img src={url} alt={f.name}
+                          style={{ width: 80, height: 80, objectFit: 'cover', borderRadius: 8, border: '1px solid #e2e8f0' }} />
+                        <button type="button"
+                          onClick={e => { e.stopPropagation(); setClaimPhotos(prev => prev.filter((_, j) => j !== i)); }}
+                          style={{ position: 'absolute', top: -6, right: -6, background: '#ef4444', color: '#fff', border: 'none', borderRadius: '50%', width: 20, height: 20, fontSize: 11, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700 }}>✕</button>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+
         <div className="form-actions" style={{ marginTop: 16 }}>
           <button type="submit" className="btn btn-primary" disabled={submitting}>
-            {submitting ? '⏳ 등록 중...' : '📥 클레임 접수 등록'}
+            {submitting ? (claimPhotos.length ? '⏳ 접수 및 사진 업로드 중...' : '⏳ 등록 중...') : '📥 클레임 접수 등록'}
           </button>
           <button type="button" className="btn btn-ghost" onClick={() => navigate('/claims')}>
             취소
