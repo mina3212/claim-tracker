@@ -114,7 +114,8 @@ export default function ClaimDetail() {
   const [savingEntry,    setSavingEntry]    = useState(false);
   const [entryEditMode,   setEntryEditMode]   = useState('raw'); // 'raw'|'cause'|'action'
   const [entryEditFiles,  setEntryEditFiles]  = useState([]);
-  const [entryEditCauses, setEntryEditCauses] = useState([]);
+  const [entryEditCauses,       setEntryEditCauses]       = useState([]);
+  const [entryEditExistingImgs, setEntryEditExistingImgs] = useState([]);
 
   /* ── 회수품 원인분석 전용 상태 ── */
   const [selectedCauses,   setSelectedCauses]   = useState([]);
@@ -239,7 +240,7 @@ export default function ClaimDetail() {
       };
 
       let description = advDesc;
-      if (claim.current_stage === '회수품 원인분析') {
+      if (claim.current_stage === '회수품 원인분석') {
         const causeStr = selectedCauses
           .map(c => c === '기타' ? `기타(${etcDetail.trim()})` : c)
           .join(', ');
@@ -340,16 +341,11 @@ export default function ClaimDetail() {
         );
         description = `[원인] ${causeStr}\n[상세JSON] ${JSON.stringify(causesWithImgs)}`;
       } else {
-        // 기타/조치: append new images to existing description
+        // 기타/조치: combine surviving existing imgs + new uploads
         const newImgs = await uploadAllEntry(entryEditFiles);
-        if (newImgs.length) {
-          const lines = description.split('\n');
-          const imgsLine = lines.find(l => l.startsWith('[imgs]')) || '';
-          let existingImgs = [];
-          try { if (imgsLine) existingImgs = JSON.parse(imgsLine.replace('[imgs] ', '')); } catch {}
-          const allImgs = [...existingImgs, ...newImgs];
-          const textLines = lines.filter(l => !l.startsWith('[imgs]'));
-          description = textLines.join('\n') + `\n[imgs] ${JSON.stringify(allImgs)}`;
+        const allImgs = [...entryEditExistingImgs, ...newImgs];
+        if (allImgs.length) {
+          description = description.replace(/\n\n\[imgs\] \[.*\]$/s, '') + `\n\n[imgs] ${JSON.stringify(allImgs)}`;
         }
       }
 
@@ -363,6 +359,7 @@ export default function ClaimDetail() {
       setEditingEntryId(null);
       setEntryEditFiles([]);
       setEntryEditCauses([]);
+      setEntryEditExistingImgs([]);
       setEntryEditMode('raw');
       toast('수정 완료', '이력이 수정되었습니다', 'success');
     } catch (err) {
@@ -1184,29 +1181,25 @@ export default function ClaimDetail() {
                           onClick={() => {
                             setEditingEntryId(entry.id);
                             const desc = entry.description || '';
-                            setEntryEdit({
-                              stage_date:   entry.stage_date || '',
-                              description:  desc,
-                              handler:      entry.handler || '',
-                              handler_dept: entry.handler_dept || '',
-                            });
                             setEntryEditFiles([]);
-                            // Determine edit mode from stage name
-                            if (entry.stage_name === '회수품 원인분析') {
+                            if (desc.includes('[상세JSON]')) {
+                              // 회수품 원인분析: cause edit mode (detected by format)
                               setEntryEditMode('cause');
+                              setEntryEditExistingImgs([]);
+                              setEntryEdit({ stage_date: entry.stage_date || '', description: desc, handler: entry.handler || '', handler_dept: entry.handler_dept || '' });
                               let parsedCauses = [];
-                              if (desc.includes('[상세JSON]')) {
-                                const jsonLine = desc.split('\n').find(l => l.startsWith('[상세JSON]')) || '';
-                                try { parsedCauses = JSON.parse(jsonLine.replace('[상세JSON] ', '')); } catch {}
-                              }
-                              setEntryEditCauses(
-                                parsedCauses.length
-                                  ? parsedCauses.map(c => ({ text: c.text || '', existingImgs: c.imgs || [], newFiles: [] }))
-                                  : [{ text: '', existingImgs: [], newFiles: [] }]
-                              );
+                              const jl = desc.split('\n').find(l => l.startsWith('[상세JSON]')) || '';
+                              try { parsedCauses = JSON.parse(jl.replace('[상세JSON] ', '')); } catch {}
+                              setEntryEditCauses(parsedCauses.length ? parsedCauses.map(c => ({ text: c.text || '', existingImgs: c.imgs || [], newFiles: [] })) : [{ text: '', existingImgs: [], newFiles: [] }]);
                             } else {
+                              // 기타/조치: strip [imgs] from description, store as existing thumbnails
                               setEntryEditMode(entry.stage_name === '조치' ? 'action' : 'raw');
                               setEntryEditCauses([]);
+                              let existingImgs = [];
+                              const im = desc.match(/\n\n\[imgs\] (\[.*\])$/s);
+                              if (im) { try { existingImgs = JSON.parse(im[1]); } catch {} }
+                              setEntryEditExistingImgs(existingImgs);
+                              setEntryEdit({ stage_date: entry.stage_date || '', description: desc.replace(/\n\n\[imgs\] \[.*\]$/s, ''), handler: entry.handler || '', handler_dept: entry.handler_dept || '' });
                             }
                           }}
                         >✏️ 수정</button>
@@ -1310,6 +1303,19 @@ export default function ClaimDetail() {
                               <input ref={entryEditFileRef} type="file" accept="image/*" multiple style={{ display: 'none' }}
                                 onChange={e => { const files = Array.from(e.target.files || []); if (files.length > 0) setEntryEditFiles(prev => [...prev, ...files]); }}
                               />
+                              {entryEditExistingImgs.length > 0 && (
+                                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 6 }}>
+                                  {entryEditExistingImgs.map((url, i) => (
+                                    <div key={i} style={{ position: 'relative' }}>
+                                      <a href={url} target="_blank" rel="noreferrer">
+                                        <img src={url} alt="" style={{ width: 60, height: 60, objectFit: 'cover', borderRadius: 6, border: '1px solid #e2e8f0' }} />
+                                      </a>
+                                      <button type="button" onClick={() => setEntryEditExistingImgs(p => p.filter((_, j) => j !== i))}
+                                        style={{ position: 'absolute', top: -5, right: -5, background: '#ef4444', color: '#fff', border: 'none', borderRadius: '50%', width: 16, height: 16, fontSize: 9, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>✕</button>
+                                    </div>
+                                  ))}
+                                </div>
+                              )}
                               <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginTop: 4, alignItems: 'center' }}>
                                 <button type="button" onClick={() => entryEditFileRef.current?.click()}
                                   style={{ fontSize: 11, padding: '4px 10px', borderRadius: 8, border: '1px solid #e2e8f0', background: '#f8fafc', color: '#475569', cursor: 'pointer' }}>📷 사진 선택</button>
