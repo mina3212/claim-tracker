@@ -108,6 +108,9 @@ export default function ClaimDetail() {
   const [editingEntryId, setEditingEntryId] = useState(null);
   const [entryEdit,      setEntryEdit]      = useState({});
   const [savingEntry,    setSavingEntry]    = useState(false);
+  const [entryEditMode,   setEntryEditMode]   = useState('raw'); // 'raw'|'cause'|'action'
+  const [entryEditFiles,  setEntryEditFiles]  = useState([]);
+  const [entryEditCauses, setEntryEditCauses] = useState([]);
 
   /* ── 회수품 원인분석 전용 상태 ── */
   const [selectedCauses,   setSelectedCauses]   = useState([]);
@@ -307,14 +310,50 @@ export default function ClaimDetail() {
   const handleSaveEntry = async () => {
     setSavingEntry(true);
     try {
+      const uploadAllEntry = async (files) => {
+        const urls = [];
+        for (const f of files) urls.push(await uploadStageImage(f, id));
+        return urls;
+      };
+
+      let description = entryEdit.description || '';
+
+      if (entryEditMode === 'cause') {
+        // 회수품 원인분析: rebuild [상세JSON] with updated texts + new images
+        const lines = description.split('\n');
+        const causeStr = (lines.find(l => l.startsWith('[원인]')) || '').replace('[원인] ', '');
+        const causesWithImgs = await Promise.all(
+          entryEditCauses.map(async (c) => {
+            const newImgs = await uploadAllEntry(c.newFiles || []);
+            return { text: c.text, imgs: [...(c.existingImgs || []), ...newImgs] };
+          })
+        );
+        description = `[원인] ${causeStr}\n[상세JSON] ${JSON.stringify(causesWithImgs)}`;
+      } else {
+        // 기타/조치: append new images to existing description
+        const newImgs = await uploadAllEntry(entryEditFiles);
+        if (newImgs.length) {
+          const lines = description.split('\n');
+          const imgsLine = lines.find(l => l.startsWith('[imgs]')) || '';
+          let existingImgs = [];
+          try { if (imgsLine) existingImgs = JSON.parse(imgsLine.replace('[imgs] ', '')); } catch {}
+          const allImgs = [...existingImgs, ...newImgs];
+          const textLines = lines.filter(l => !l.startsWith('[imgs]'));
+          description = textLines.join('\n') + `\n[imgs] ${JSON.stringify(allImgs)}`;
+        }
+      }
+
       await updateStageEntry(editingEntryId, {
         stage_date:   entryEdit.stage_date,
-        description:  entryEdit.description,
+        description,
         handler:      entryEdit.handler,
         handler_dept: entryEdit.handler_dept,
       });
-      patchStageEntry(editingEntryId, entryEdit);
+      patchStageEntry(editingEntryId, { ...entryEdit, description });
       setEditingEntryId(null);
+      setEntryEditFiles([]);
+      setEntryEditCauses([]);
+      setEntryEditMode('raw');
       toast('수정 완료', '이력이 수정되었습니다', 'success');
     } catch (err) {
       toast('수정 실패', err.message, 'error');
@@ -1115,12 +1154,31 @@ export default function ClaimDetail() {
                           style={{ fontSize: 11, padding: '2px 8px' }}
                           onClick={() => {
                             setEditingEntryId(entry.id);
+                            const desc = entry.description || '';
                             setEntryEdit({
                               stage_date:   entry.stage_date || '',
-                              description:  entry.description || '',
+                              description:  desc,
                               handler:      entry.handler || '',
                               handler_dept: entry.handler_dept || '',
                             });
+                            setEntryEditFiles([]);
+                            // Determine edit mode from stage name
+                            if (entry.stage_name === '회수품 원인분析') {
+                              setEntryEditMode('cause');
+                              let parsedCauses = [];
+                              if (desc.includes('[상세JSON]')) {
+                                const jsonLine = desc.split('\n').find(l => l.startsWith('[상세JSON]')) || '';
+                                try { parsedCauses = JSON.parse(jsonLine.replace('[상세JSON] ', '')); } catch {}
+                              }
+                              setEntryEditCauses(
+                                parsedCauses.length
+                                  ? parsedCauses.map(c => ({ text: c.text || '', existingImgs: c.imgs || [], newFiles: [] }))
+                                  : [{ text: '', existingImgs: [], newFiles: [] }]
+                              );
+                            } else {
+                              setEntryEditMode(entry.stage_name === '조치' ? 'action' : 'raw');
+                              setEntryEditCauses([]);
+                            }
                           }}
                         >✏️ 수정</button>
                       )}
@@ -1142,23 +1200,106 @@ export default function ClaimDetail() {
                           </div>
                           <div className="form-group">
                             <label style={{ fontSize: 11 }}>담당자</label>
-                            <input value={entryEdit.handler || ''} onChange={e => setEntryEdit(p => ({ ...p, handler: e.target.value }))} />
+                            <input
+                              list={entryEditMode === 'cause' ? 'entry-inspectors' : 'entry-salesreps'}
+                              value={entryEdit.handler || ''}
+                              onChange={e => setEntryEdit(p => ({ ...p, handler: e.target.value }))}
+                            />
+                            <datalist id="entry-inspectors">
+                              {INSPECTORS.map(n => <option key={n} value={n} />)}
+                            </datalist>
+                            <datalist id="entry-salesreps">
+                              {SALES_REPS.map(n => <option key={n} value={n} />)}
+                            </datalist>
                           </div>
                         </div>
-                        <div className="form-group" style={{ marginBottom: 10 }}>
-                          <label style={{ fontSize: 11 }}>처리 내용</label>
-                          <textarea
-                            rows={2}
-                            value={entryEdit.description || ''}
-                            onChange={e => setEntryEdit(p => ({ ...p, description: e.target.value }))}
-                            style={{ resize: 'vertical', width: '100%' }}
-                          />
-                        </div>
+
+                        {/* ── 원인분析 수정 UI ── */}
+                        {entryEditMode === 'cause' ? (
+                          <div style={{ marginBottom: 10 }}>
+                            <label style={{ fontSize: 11, fontWeight: 600, display: 'block', marginBottom: 6 }}>원인별 상세 내용</label>
+                            {entryEditCauses.map((item, idx) => (
+                              <div key={idx} style={{ border: '1px solid #e2e8f0', borderRadius: 8, padding: 10, marginBottom: 8, background: '#fff' }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6 }}>
+                                  <span style={{ background: '#dbeafe', color: '#1e40af', fontWeight: 700, fontSize: 10, padding: '2px 7px', borderRadius: 12 }}>{idx+1}번째 원인</span>
+                                  {entryEditCauses.length > 1 && (
+                                    <button type="button" onClick={() => setEntryEditCauses(p => p.filter((_, i) => i !== idx))}
+                                      style={{ marginLeft: 'auto', fontSize: 11, color: '#ef4444', background: 'none', border: 'none', cursor: 'pointer' }}>✕ 삭제</button>
+                                  )}
+                                </div>
+                                <textarea rows={2} value={item.text}
+                                  onChange={e => setEntryEditCauses(p => p.map((c, i) => i === idx ? { ...c, text: e.target.value } : c))}
+                                  style={{ resize: 'vertical', width: '100%', marginBottom: 6 }}
+                                />
+                                {item.existingImgs && item.existingImgs.length > 0 && (
+                                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginBottom: 6 }}>
+                                    {item.existingImgs.map((url, ui) => (
+                                      <div key={ui} style={{ position: 'relative' }}>
+                                        <a href={url} target="_blank" rel="noreferrer">
+                                          <img src={url} alt="" style={{ width: 56, height: 56, objectFit: 'cover', borderRadius: 4, border: '1px solid #e2e8f0' }} />
+                                        </a>
+                                        <button type="button"
+                                          onClick={() => setEntryEditCauses(p => p.map((c, i) => i === idx ? { ...c, existingImgs: c.existingImgs.filter((_, j) => j !== ui) } : c))}
+                                          style={{ position: 'absolute', top: -4, right: -4, background: '#ef4444', color: '#fff', border: 'none', borderRadius: '50%', width: 16, height: 16, fontSize: 9, cursor: 'pointer', lineHeight: 1, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>✕</button>
+                                      </div>
+                                    ))}
+                                  </div>
+                                )}
+                                <div>
+                                  <label style={{ fontSize: 10, color: '#64748b' }}>사진 추가 (선택)</label>
+                                  <input type="file" accept="image/*" multiple
+                                    onChange={e => { const files = Array.from(e.target.files || []); setEntryEditCauses(p => p.map((c, i) => i === idx ? { ...c, newFiles: [...(c.newFiles||[]), ...files] } : c)); e.target.value = ''; }}
+                                    style={{ fontSize: 11, display: 'block', marginTop: 2 }}
+                                  />
+                                  {item.newFiles && item.newFiles.length > 0 && (
+                                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginTop: 4 }}>
+                                      {item.newFiles.map((f, fi) => (
+                                        <span key={fi} style={{ fontSize: 10, background: '#eff6ff', borderRadius: 4, padding: '1px 6px' }}>📷 {f.name}
+                                          <button type="button" onClick={() => setEntryEditCauses(p => p.map((c, i) => i === idx ? { ...c, newFiles: c.newFiles.filter((_, j) => j !== fi) } : c))}
+                                            style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#94a3b8', marginLeft: 2 }}>✕</button>
+                                        </span>
+                                      ))}
+                                    </div>
+                                  )}
+                                </div>
+                              </div>
+                            ))}
+                            <button type="button" onClick={() => setEntryEditCauses(p => [...p, { text: '', existingImgs: [], newFiles: [] }])}
+                              style={{ fontSize: 11, color: '#3b82f6', background: 'none', border: '1px dashed #93c5fd', borderRadius: 8, padding: '4px 12px', cursor: 'pointer', width: '100%' }}>+ 원인 추가</button>
+                          </div>
+                        ) : (
+                          /* ── 기타 단계 수정 UI ── */
+                          <div className="form-group" style={{ marginBottom: 10 }}>
+                            <label style={{ fontSize: 11 }}>처리 내용</label>
+                            <textarea rows={3} value={entryEdit.description || ''}
+                              onChange={e => setEntryEdit(p => ({ ...p, description: e.target.value }))}
+                              style={{ resize: 'vertical', width: '100%' }}
+                            />
+                            <div style={{ marginTop: 8 }}>
+                              <label style={{ fontSize: 11, color: '#64748b' }}>사진 첨부 <span style={{ fontSize: 10, color: '#94a3b8' }}>(선택)</span></label>
+                              <input type="file" accept="image/*" multiple
+                                onChange={e => { setEntryEditFiles(prev => [...prev, ...Array.from(e.target.files || [])]); e.target.value = ''; }}
+                                style={{ fontSize: 11, display: 'block', marginTop: 2 }}
+                              />
+                              {entryEditFiles.length > 0 && (
+                                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginTop: 4 }}>
+                                  {entryEditFiles.map((f, i) => (
+                                    <span key={i} style={{ fontSize: 10, background: '#eff6ff', borderRadius: 4, padding: '1px 6px' }}>📷 {f.name}
+                                      <button type="button" onClick={() => setEntryEditFiles(p => p.filter((_, j) => j !== i))}
+                                        style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#94a3b8', marginLeft: 2 }}>✕</button>
+                                    </span>
+                                  ))}
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        )}
+
                         <div style={{ display: 'flex', gap: 6 }}>
                           <button className="btn btn-primary btn-sm" onClick={handleSaveEntry} disabled={savingEntry}>
                             {savingEntry ? '저장 중...' : '💾 저장'}
                           </button>
-                          <button className="btn btn-ghost btn-sm" onClick={() => setEditingEntryId(null)}>취소</button>
+                          <button className="btn btn-ghost btn-sm" onClick={() => { setEditingEntryId(null); setEntryEditFiles([]); setEntryEditCauses([]); }}>취소</button>
                         </div>
                       </div>
                     ) : (
