@@ -98,14 +98,14 @@ export default function ClaimReport() {
             </div>
           </div>
 
-          {/* 결재란 */}
-          <div style={{ flexShrink: 0 }}>
-            <table style={{ borderCollapse: 'collapse' }}>
+          {/* 결재란 — 남은 공간 전부 채움 */}
+          <div style={{ flex: 1 }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse' }}>
               <tbody>
                 <tr>
                   {APPROVERS.map(r => (
                     <td key={r} style={{
-                      border: '1px solid #94a3b8', width: 54, padding: '3px 0',
+                      border: '1px solid #94a3b8', padding: '3px 0',
                       textAlign: 'center', fontWeight: 700, fontSize: 10,
                       background: '#f1f5f9',
                     }}>{r}</td>
@@ -113,12 +113,12 @@ export default function ClaimReport() {
                 </tr>
                 <tr>
                   {APPROVERS.map(r => (
-                    <td key={r} style={{ border: '1px solid #94a3b8', height: 50, width: 54 }} />
+                    <td key={r} style={{ border: '1px solid #94a3b8', height: 50 }} />
                   ))}
                 </tr>
                 <tr>
                   {APPROVERS.map(r => (
-                    <td key={r} style={{ border: '1px solid #94a3b8', height: 14, width: 54 }} />
+                    <td key={r} style={{ border: '1px solid #94a3b8', height: 14 }} />
                   ))}
                 </tr>
               </tbody>
