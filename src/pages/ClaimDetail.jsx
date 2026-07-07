@@ -93,7 +93,7 @@ export default function ClaimDetail() {
   const { id }   = useParams();
   const navigate = useNavigate();
   const { claims, loading, getStagesFor, updateClaimStage, updateClaimData, removeClaim, deleteRequests, addDeleteRequest, resolveRequest, patchStageEntry } = useClaims();
-  const { user, isAdmin, displayName, department } = useAuth();
+  const { user, isAdmin, displayName, department, profile } = useAuth();
   const toast = useToast();
 
   const [notifyEmails, setNotifyEmails] = useState([]);
@@ -103,8 +103,8 @@ export default function ClaimDetail() {
 
   /* ── 단계 진행 공통 상태 ── */
   const [advDate,        setAdvDate]        = useState(new Date().toISOString().slice(0, 10));
-  const [advHandlerDept, setAdvHandlerDept] = useState(department || '');
-  const [advHandler,     setAdvHandler]     = useState(displayName || '');
+  const [advHandlerDept, setAdvHandlerDept] = useState('');
+  const [advHandler,     setAdvHandler]     = useState('');
   const [advDesc,        setAdvDesc]        = useState('');
   const [advancing,      setAdvancing]      = useState(false);
 
@@ -133,11 +133,12 @@ export default function ClaimDetail() {
   const entryEditCauseRef   = useRef(null);
   const entryEditCauseIdx   = useRef(0);
 
-  /* ── 프로필 로드 후 담당자/부서 자동세팅 ── */
+  /* ── 프로필 로드 후 담당자/부서 자동세팅 (profile 객체 기준, email fallback 방지) ── */
   useEffect(() => {
+    if (!profile) return;
     setAdvHandlerDept(prev => prev || department || '');
-    setAdvHandler(prev => prev || displayName || '');
-  }, [department, displayName]);
+    setAdvHandler(prev => prev || profile.name || '');
+  }, [profile, department]);
 
   /* ── 수정 모드 상태 ── */
   const [editMode, setEditMode]             = useState(false);

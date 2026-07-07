@@ -40,24 +40,25 @@ function buildDefectDescription(symptom, situation, request) {
 const EMPTY_SHIPMENT = () => ({ shipping_date: '', quantity: '', lot_number: '' });
 
 export default function NewClaim() {
-  const { user, displayName, department } = useAuth();
+  const { user, displayName, department, profile } = useAuth();
   const { addClaim } = useClaims();
   const toast        = useToast();
   const navigate     = useNavigate();
   const [form, setForm] = useState({ ...INITIAL });
   const [shipments, setShipments] = useState([EMPTY_SHIPMENT()]);
 
-  // 프로필 로드 후 부서·담당자 자동 세팅
+  // 프로필 로드 완료 후 부서·담당자 자동 세팅
+  // profile 객체가 있어야만 실행 (email fallback 방지)
   // 품질기술팀은 영업담당 부서가 아니므로 dept는 비워두고, 이름만 적용
   useEffect(() => {
-    if (!department && !displayName) return;
+    if (!profile) return;
     const isSalesDept = SALES_DEPTS.includes(department);
     setForm(prev => ({
       ...prev,
       sales_rep_dept: prev.sales_rep_dept || (isSalesDept ? department : ''),
-      sales_rep_name: prev.sales_rep_name || displayName || '',
+      sales_rep_name: prev.sales_rep_name || profile.name || '',
     }));
-  }, [department, displayName]);
+  }, [profile, department]);
   const [submitting, setSub]                = useState(false);
   const [claimPhotos, setClaimPhotos]       = useState([]);
   const [photoDragging, setPhotoDragging]   = useState(false);
