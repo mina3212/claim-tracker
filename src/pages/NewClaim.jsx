@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useClaims } from '../context/ClaimsContext';
 import { useToast } from '../context/ToastContext';
-import { insertClaim, CUSTOMER_GROUPS, PRODUCT_TYPES, PRODUCT_CATEGORIES, DEPARTMENTS, SALES_REPS } from '../lib/supabase';
+import { insertClaim, CUSTOMER_GROUPS, PRODUCT_TYPES, PRODUCT_CATEGORIES, DEPARTMENTS, SALES_REPS, SHIPPING_WAREHOUSES } from '../lib/supabase';
 import PartSearchModal from '../components/PartSearchModal';
 import CustomerSearchModal from '../components/CustomerSearchModal';
 import Tooltip from '../components/Tooltip';
@@ -11,22 +11,23 @@ import Tooltip from '../components/Tooltip';
 const today = () => new Date().toISOString().slice(0, 10);
 
 const INITIAL = {
-  customer_group:     '',
-  customer_name:      '',
-  occurrence_date:    '',
-  receipt_date:       today(),
-  sales_rep_dept:     '',
-  sales_rep_name:     '',
-  sales_rep_contact:  '',
-  part_number:        '',
-  part_name:          '',
-  product_type:       '',
-  product_category:   '',
-  quantity:           '',
-  lot_number:         '',
-  defect_quantity:    '',
-  defect_description: '',
+  customer_group:      '',
+  customer_name:       '',
+  occurrence_date:     '',
+  receipt_date:        today(),
+  sales_rep_dept:      '',
+  sales_rep_name:      '',
+  sales_rep_contact:   '',
+  part_number:         '',
+  part_name:           '',
+  product_type:        '',
+  product_category:    '',
+  shipping_warehouse:  '',
+  defect_quantity:     '',
+  defect_description:  '',
 };
+
+const EMPTY_SHIPMENT = () => ({ shipping_date: '', quantity: '', lot_number: '' });
 
 export default function NewClaim() {
   const { user, displayName, department } = useAuth();
@@ -38,9 +39,14 @@ export default function NewClaim() {
     sales_rep_dept: department || '',
     sales_rep_name: displayName || '',
   }));
+  const [shipments, setShipments] = useState([EMPTY_SHIPMENT()]);
   const [submitting, setSub]                = useState(false);
   const [partSearchOpen,     setPartSearchOpen]     = useState(false);
   const [customerSearchOpen, setCustomerSearchOpen] = useState(false);
+
+  const addShipment    = () => setShipments(prev => [...prev, EMPTY_SHIPMENT()]);
+  const removeShipment = (i) => setShipments(prev => prev.filter((_, idx) => idx !== i));
+  const setShipmentVal = (i, key) => (e) => setShipments(prev => prev.map((s, idx) => idx === i ? { ...s, [key]: e.target.value } : s));
 
   if (!user) return (
     <div>
@@ -55,10 +61,10 @@ export default function NewClaim() {
     setForm(prev => ({ ...prev, part_number: partNumber, part_name: partName }));
   };
 
-  /* 불량률 계산 */
-  const qty      = parseFloat(form.quantity);
+  /* 불량률 계산 (출고 수량 합계 기준) */
+  const totalQty = shipments.reduce((sum, s) => sum + (parseInt(s.quantity) || 0), 0);
   const defQty   = parseFloat(form.defect_quantity);
-  const defRate  = qty > 0 && defQty >= 0 ? ((defQty / qty) * 100).toFixed(1) : null;
+  const defRate  = totalQty > 0 && defQty >= 0 ? ((defQty / totalQty) * 100).toFixed(1) : null;
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -67,39 +73,48 @@ export default function NewClaim() {
     if (!form.customer_name.trim())    { toast('입력 오류', '고객사명을 입력하세요', 'error'); return; }
     if (!form.occurrence_date)         { toast('입력 오류', '발생일을 선택하세요', 'error'); return; }
     if (!form.sales_rep_dept)           { toast('입력 오류', '영업담당자 부서를 선택하세요', 'error'); return; }
-    if (!form.sales_rep_name.trim())   { toast('입력 오류', '영업담당자를 입력하세요', 'error'); return; }
+    if (!form.sales_rep_name)          { toast('입력 오류', '영업담당자를 선택하세요', 'error'); return; }
     if (!form.sales_rep_contact.trim()){ toast('입력 오류', '담당자 연락처를 입력하세요', 'error'); return; }
 
     if (!form.part_number.trim())      { toast('입력 오류', '품번을 입력하세요', 'error'); return; }
     if (!form.part_name.trim())        { toast('입력 오류', '품명을 입력하세요', 'error'); return; }
-    if (form.quantity === '')          { toast('입력 오류', '수량을 입력하세요', 'error'); return; }
-    if (!form.lot_number.trim())       { toast('입력 오류', 'LOT 번호를 입력하세요', 'error'); return; }
+    for (let i = 0; i < shipments.length; i++) {
+      const s = shipments[i];
+      if (!s.quantity)     { toast('입력 오류', `출하 ${i + 1}차 수량을 입력하세요`, 'error'); return; }
+      if (!s.lot_number.trim()) { toast('입력 오류', `출하 ${i + 1}차 LOT 번호를 입력하세요`, 'error'); return; }
+    }
     if (!form.product_type)            { toast('입력 오류', '품목 유형을 선택하세요', 'error'); return; }
     if (!form.product_category)        { toast('입력 오류', '품목군을 선택하세요', 'error'); return; }
 
     if (form.defect_quantity === '')   { toast('입력 오류', '불량 수량을 입력하세요', 'error'); return; }
-    if (defQty > qty)                  { toast('입력 오류', '불량 수량이 출고 수량보다 클 수 없습니다', 'error'); return; }
+    if (defQty > totalQty)             { toast('입력 오류', '불량 수량이 출고 수량 합계보다 클 수 없습니다', 'error'); return; }
     if (!form.defect_description.trim()){ toast('입력 오류', '불량 내용을 입력하세요', 'error'); return; }
+
+    const lotNumbers     = shipments.map(s => s.lot_number.trim()).filter(Boolean).join(', ');
+    const firstShipment  = shipments[0];
 
     setSub(true);
     try {
       const payload = {
         ...form,
-        quantity:           parseInt(form.quantity),
-        defect_quantity:    parseInt(form.defect_quantity),
-        customer_name:      form.customer_name.trim(),
-        customer_group:     form.customer_group || null,
-        product_type:       form.product_type || null,
-        product_category:   form.product_category || null,
-        defect_description: form.defect_description.trim(),
-        sales_rep_dept:     form.sales_rep_dept || null,
-        sales_rep_name:     form.sales_rep_name.trim(),
-        sales_rep_contact:  form.sales_rep_contact.trim(),
-        part_number:        form.part_number.trim(),
-        part_name:          form.part_name.trim(),
-        lot_number:         form.lot_number.trim(),
-        occurrence_date:    form.occurrence_date,
-        receipt_date:       form.receipt_date || null,
+        quantity:            totalQty,
+        defect_quantity:     parseInt(form.defect_quantity),
+        customer_name:       form.customer_name.trim(),
+        customer_group:      form.customer_group || null,
+        product_type:        form.product_type || null,
+        product_category:    form.product_category || null,
+        defect_description:  form.defect_description.trim(),
+        sales_rep_dept:      form.sales_rep_dept || null,
+        sales_rep_name:      form.sales_rep_name,
+        sales_rep_contact:   form.sales_rep_contact.trim(),
+        part_number:         form.part_number.trim(),
+        part_name:           form.part_name.trim(),
+        lot_number:          lotNumbers,
+        shipping_warehouse:  form.shipping_warehouse || null,
+        shipping_date:       firstShipment.shipping_date || null,
+        shipments:           shipments.map(s => ({ ...s, quantity: parseInt(s.quantity) || 0 })),
+        occurrence_date:     form.occurrence_date,
+        receipt_date:        form.receipt_date || null,
       };
       const { claim, firstEntry } = await insertClaim(payload, user);
       addClaim(claim, firstEntry);
@@ -209,14 +224,51 @@ export default function NewClaim() {
                   onClick={() => setPartSearchOpen(true)} style={{ flexShrink: 0 }}>🔍</button>
               </div>
             </div>
-            <div className="form-group">
-              <label>출고 수량 (EA) <span className="required-star">*</span></label>
-              <input type="number" placeholder="0" min="0" value={form.quantity} onChange={set('quantity')} required />
+            <div className="form-group form-span-2">
+              <label>출하 창고</label>
+              <select value={form.shipping_warehouse} onChange={set('shipping_warehouse')}>
+                <option value="">창고 선택</option>
+                {SHIPPING_WAREHOUSES.map(w => <option key={w} value={w}>{w}</option>)}
+              </select>
             </div>
-            <div className="form-group">
-              <label>LOT 번호 <span className="required-star">*</span></label>
-              <input placeholder="LOT" value={form.lot_number} onChange={set('lot_number')} required />
+          </div>
+
+          {/* 출하 차수 목록 */}
+          <div style={{ marginTop: 16 }}>
+            <div style={{ fontSize: 12, fontWeight: 700, color: '#64748b', marginBottom: 8, textTransform: 'uppercase', letterSpacing: .5 }}>
+              출하 내역 <span style={{ color: '#ef4444' }}>*</span>
+              {totalQty > 0 && <span style={{ marginLeft: 8, fontSize: 12, color: '#0f172a', fontWeight: 600, textTransform: 'none' }}>합계: {totalQty.toLocaleString()} EA</span>}
             </div>
+            {shipments.map((s, i) => (
+              <div key={i} style={{ display: 'grid', gridTemplateColumns: '160px 140px 1fr auto', gap: 8, marginBottom: 8, alignItems: 'end' }}>
+                <div>
+                  {i === 0 && <label style={{ fontSize: 11, color: '#94a3b8', fontWeight: 600, display: 'block', marginBottom: 3 }}>출하일자</label>}
+                  <input type="date" value={s.shipping_date} onChange={setShipmentVal(i, 'shipping_date')} />
+                </div>
+                <div>
+                  {i === 0 && <label style={{ fontSize: 11, color: '#94a3b8', fontWeight: 600, display: 'block', marginBottom: 3 }}>출고 수량 (EA) <span style={{ color: '#ef4444' }}>*</span></label>}
+                  <input type="number" min="0" placeholder="0" value={s.quantity} onChange={setShipmentVal(i, 'quantity')} />
+                </div>
+                <div>
+                  {i === 0 && <label style={{ fontSize: 11, color: '#94a3b8', fontWeight: 600, display: 'block', marginBottom: 3 }}>LOT 번호 <span style={{ color: '#ef4444' }}>*</span></label>}
+                  <input placeholder="LOT 번호" value={s.lot_number} onChange={setShipmentVal(i, 'lot_number')} />
+                </div>
+                <div style={{ paddingBottom: 1 }}>
+                  {i === 0 && <div style={{ height: 18, marginBottom: 3 }} />}
+                  {shipments.length > 1 ? (
+                    <button type="button" onClick={() => removeShipment(i)}
+                      style={{ padding: '7px 10px', borderRadius: 7, border: '1px solid #fca5a5', background: '#fff', color: '#dc2626', cursor: 'pointer', fontSize: 14, lineHeight: 1 }}>✕</button>
+                  ) : <div style={{ width: 36 }} />}
+                </div>
+              </div>
+            ))}
+            <button type="button" onClick={addShipment}
+              style={{ marginTop: 4, padding: '6px 14px', borderRadius: 8, border: '1.5px dashed #cbd5e1', background: '#f8fafc', color: '#64748b', fontSize: 12, fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4 }}>
+              ＋ 출하 차수 추가
+            </button>
+          </div>
+
+          <div className="form-grid form-cols-4" style={{ marginTop: 16 }}>
             <div className="form-group form-span-4">
               <label>품목 유형 <span className="required-star">*</span></label>
               <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
@@ -293,7 +345,7 @@ export default function NewClaim() {
                       <span style={{ fontSize: 15 }}>{parseFloat(defRate) > 5 ? '🔴' : '🟢'}</span>
                       {defRate}%
                       <span style={{ fontSize: 11, fontWeight: 400, color: '#94a3b8' }}>
-                        ({defQty}/{qty}개)
+                        ({defQty}/{totalQty}개)
                       </span>
                     </>
                   : <span style={{ fontSize: 12 }}>출고 수량 · 불량 수량 입력 시 자동 계산</span>
