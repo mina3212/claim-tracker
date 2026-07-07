@@ -4,9 +4,10 @@ import { sb, getProfile, upsertProfile, syncProfileEmail } from '../lib/supabase
 const AuthCtx = createContext(null);
 
 export function AuthProvider({ children }) {
-  const [user,    setUser]    = useState(null);
-  const [profile, setProfile] = useState(null);   // { name, department, is_admin }
-  const [loading, setLoading] = useState(true);   // 세션 확인 중
+  const [user,              setUser]              = useState(null);
+  const [profile,           setProfile]           = useState(null);
+  const [loading,           setLoading]           = useState(true);
+  const [isPasswordRecovery, setIsPasswordRecovery] = useState(false);
 
   useEffect(() => {
     sb.auth.getSession().then(({ data: { session } }) => {
@@ -16,7 +17,10 @@ export function AuthProvider({ children }) {
       else setLoading(false);
     });
 
-    const { data: { subscription } } = sb.auth.onAuthStateChange((_, session) => {
+    const { data: { subscription } } = sb.auth.onAuthStateChange((event, session) => {
+      if (event === 'PASSWORD_RECOVERY') {
+        setIsPasswordRecovery(true);
+      }
       const u = session?.user ?? null;
       setUser(u);
       if (u) loadProfile(u.id, u.email);
@@ -47,7 +51,7 @@ export function AuthProvider({ children }) {
   const department  = profile?.department || '';
 
   return (
-    <AuthCtx.Provider value={{ user, profile, loading, displayName, isAdmin, department, saveName, reloadProfile: () => user && loadProfile(user.id) }}>
+    <AuthCtx.Provider value={{ user, profile, loading, displayName, isAdmin, department, saveName, reloadProfile: () => user && loadProfile(user.id), isPasswordRecovery, setIsPasswordRecovery }}>
       {children}
     </AuthCtx.Provider>
   );

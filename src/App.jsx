@@ -5,8 +5,9 @@ import { ClaimsProvider } from './context/ClaimsContext';
 import { SupplierClaimsProvider } from './context/SupplierClaimsContext';
 import { PrintProvider }  from './context/PrintContext';
 import { canViewSupplierClaims } from './lib/supabase';
-import Layout      from './components/Layout';
-import LoginGate   from './components/LoginGate';
+import Layout             from './components/Layout';
+import LoginGate          from './components/LoginGate';
+import PasswordResetPage  from './components/PasswordResetPage';
 import Dashboard   from './pages/Dashboard';
 import ClaimList   from './pages/ClaimList';
 import ClaimDetail from './pages/ClaimDetail';
@@ -37,7 +38,7 @@ function AdminGuard({ children }) {
 }
 
 function AppRoutes() {
-  const { user, loading } = useAuth();
+  const { user, loading, isPasswordRecovery } = useAuth();
 
   if (loading) return (
     <div style={{
@@ -55,6 +56,7 @@ function AppRoutes() {
   );
 
   if (!user) return <LoginGate />;
+  if (isPasswordRecovery) return <PasswordResetPage />;
 
   return (
     <ClaimsProvider>
