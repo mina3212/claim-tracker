@@ -1,4 +1,4 @@
-﻿import { useState, useEffect } from 'react';
+﻿import { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useClaims } from '../context/ClaimsContext';
 import { useAuth } from '../context/AuthContext';
@@ -125,6 +125,9 @@ export default function ClaimDetail() {
   /* ── 이미지 업로드 상태 ── */
   const [causes,   setCauses]   = useState([{ text: '', files: [] }]); // 회수품원인분析 다중원인
   const [advFiles, setAdvFiles] = useState([]); // 기타 단계 첨부 이미지
+  const advFileRef     = useRef(null); // 파일 input ref (조치/기타)
+  const causeFileRef   = useRef(null); // 파일 input ref (원인분析 per-cause)
+  const causeFileIdx   = useRef(0);    // 현재 파일 추가 중인 원인 인덱스
 
   /* ── 프로필 로드 후 담당자/부서 자동세팅 ── */
   useEffect(() => {
@@ -444,6 +447,22 @@ export default function ClaimDetail() {
 
     return (
       <div className="advance-section">
+        {/* hidden file inputs — ref로 제어 */}
+        <input ref={advFileRef} type="file" accept="image/*" multiple style={{ display: 'none' }}
+          onChange={e => {
+            const files = Array.from(e.target.files || []);
+            if (files.length > 0) setAdvFiles(prev => [...prev, ...files]);
+            if (advFileRef.current) advFileRef.current.value = '';
+          }}
+        />
+        <input ref={causeFileRef} type="file" accept="image/*" multiple style={{ display: 'none' }}
+          onChange={e => {
+            const files = Array.from(e.target.files || []);
+            const idx = causeFileIdx.current;
+            if (files.length > 0) setCauses(prev => prev.map((c, i) => i === idx ? { ...c, files: [...c.files, ...files] } : c));
+            if (causeFileRef.current) causeFileRef.current.value = '';
+          }}
+        />
         <div style={{ fontSize: 13, fontWeight: 600, color: '#0f172a', marginBottom: 12 }}>
           {STAGE_ICONS[currentIdx]}&nbsp;
           <span style={{ color: '#3b82f6' }}>{claim.current_stage}</span> 처리 결과 입력
@@ -573,37 +592,26 @@ export default function ClaimDetail() {
                     }}
                   />
                   <div>
-                    <label style={{ fontSize: 11, color: '#64748b', marginBottom: 4, display: 'block' }}>
-                      사진 첨부 (선택)
-                    </label>
-                    <input
-                      type="file"
-                      accept="image/*"
-                      multiple
-                      onChange={e => {
-                        const files = Array.from(e.target.files || []);
-                        setCauses(prev => prev.map((c, i) => i === idx ? { ...c, files: [...c.files, ...files] } : c));
-                        e.target.value = '';
-                      }}
-                      style={{ fontSize: 12 }}
-                    />
-                    {item.files.length > 0 && (
-                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 6 }}>
-                        {item.files.map((f, fi) => (
-                          <div key={fi} style={{
-                            display: 'flex', alignItems: 'center', gap: 4,
-                            background: '#eff6ff', borderRadius: 6, padding: '2px 8px', fontSize: 11,
-                          }}>
-                            <span>📷 {f.name}</span>
-                            <button
-                              type="button"
-                              onClick={() => setCauses(prev => prev.map((c, i) => i === idx ? { ...c, files: c.files.filter((_, fi2) => fi2 !== fi) } : c))}
-                              style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#94a3b8', padding: 0, lineHeight: 1 }}
-                            >✕</button>
-                          </div>
-                        ))}
-                      </div>
-                    )}
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, alignItems: 'center' }}>
+                      <button type="button"
+                        onClick={() => { causeFileIdx.current = idx; causeFileRef.current?.click(); }}
+                        style={{ fontSize: 11, padding: '4px 10px', borderRadius: 8, border: '1px solid #e2e8f0', background: '#f8fafc', color: '#475569', cursor: 'pointer' }}>
+                        📷 사진 선택
+                      </button>
+                      {item.files.map((f, fi) => (
+                        <div key={fi} style={{
+                          display: 'flex', alignItems: 'center', gap: 4,
+                          background: '#eff6ff', borderRadius: 6, padding: '2px 8px', fontSize: 11,
+                        }}>
+                          <span>📷 {f.name}</span>
+                          <button
+                            type="button"
+                            onClick={() => setCauses(prev => prev.map((c, i) => i === idx ? { ...c, files: c.files.filter((_, fi2) => fi2 !== fi) } : c))}
+                            style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#94a3b8', padding: 0, lineHeight: 1 }}
+                          >✕</button>
+                        </div>
+                      ))}
+                    </div>
                   </div>
                 </div>
               ))}
@@ -650,21 +658,27 @@ export default function ClaimDetail() {
             {/* 사진 첨부 (선택) */}
             <div className="form-group" style={{ marginBottom: 12 }}>
               <label style={{ fontSize: 12, color: '#64748b' }}>사진 첨부 <span style={{ fontSize: 11, color: '#94a3b8' }}>(선택)</span></label>
-              <input type="file" accept="image/*" multiple
-                onChange={e => { setAdvFiles(prev => [...prev, ...Array.from(e.target.files || [])]); e.target.value = ''; }}
-                style={{ fontSize: 12 }}
+              <input ref={advFileRef} type="file" accept="image/*" multiple style={{ display: 'none' }}
+                onChange={e => {
+                  const files = Array.from(e.target.files || []);
+                  if (files.length > 0) setAdvFiles(prev => [...prev, ...files]);
+                  if (advFileRef.current) advFileRef.current.value = '';
+                }}
               />
-              {advFiles.length > 0 && (
-                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 6 }}>
-                  {advFiles.map((f, i) => (
-                    <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 4, background: '#eff6ff', borderRadius: 6, padding: '2px 8px', fontSize: 11 }}>
-                      <span>📷 {f.name}</span>
-                      <button type="button" onClick={() => setAdvFiles(prev => prev.filter((_, j) => j !== i))}
-                        style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#94a3b8', padding: 0 }}>✕</button>
-                    </div>
-                  ))}
-                </div>
-              )}
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, alignItems: 'center' }}>
+                <button type="button"
+                  onClick={() => advFileRef.current?.click()}
+                  style={{ fontSize: 12, padding: '5px 12px', borderRadius: 8, border: '1px solid #e2e8f0', background: '#f8fafc', color: '#475569', cursor: 'pointer' }}>
+                  📷 사진 선택
+                </button>
+                {advFiles.map((f, i) => (
+                  <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 4, background: '#eff6ff', borderRadius: 6, padding: '2px 8px', fontSize: 11 }}>
+                    <span>📷 {f.name}</span>
+                    <button type="button" onClick={() => setAdvFiles(prev => prev.filter((_, j) => j !== i))}
+                      style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#94a3b8', padding: 0 }}>✕</button>
+                  </div>
+                ))}
+              </div>
             </div>
           </div>
         ) : (
@@ -691,21 +705,20 @@ export default function ClaimDetail() {
             {/* 사진 첨부 (선택) */}
             <div style={{ marginTop: 10 }}>
               <label style={{ fontSize: 12, color: '#64748b', display: 'block', marginBottom: 4 }}>사진 첨부 <span style={{ fontSize: 11, color: '#94a3b8' }}>(선택)</span></label>
-              <input type="file" accept="image/*" multiple
-                onChange={e => { setAdvFiles(prev => [...prev, ...Array.from(e.target.files || [])]); e.target.value = ''; }}
-                style={{ fontSize: 12 }}
-              />
-              {advFiles.length > 0 && (
-                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 6 }}>
-                  {advFiles.map((f, i) => (
-                    <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 4, background: '#eff6ff', borderRadius: 6, padding: '2px 8px', fontSize: 11 }}>
-                      <span>📷 {f.name}</span>
-                      <button type="button" onClick={() => setAdvFiles(prev => prev.filter((_, j) => j !== i))}
-                        style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#94a3b8', padding: 0 }}>✕</button>
-                    </div>
-                  ))}
-                </div>
-              )}
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, alignItems: 'center' }}>
+                <button type="button"
+                  onClick={() => advFileRef.current?.click()}
+                  style={{ fontSize: 12, padding: '5px 12px', borderRadius: 8, border: '1px solid #e2e8f0', background: '#f8fafc', color: '#475569', cursor: 'pointer' }}>
+                  📷 사진 선택
+                </button>
+                {advFiles.map((f, i) => (
+                  <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 4, background: '#eff6ff', borderRadius: 6, padding: '2px 8px', fontSize: 11 }}>
+                    <span>📷 {f.name}</span>
+                    <button type="button" onClick={() => setAdvFiles(prev => prev.filter((_, j) => j !== i))}
+                      style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#94a3b8', padding: 0 }}>✕</button>
+                  </div>
+                ))}
+              </div>
             </div>
           </div>
         )}
