@@ -9,6 +9,7 @@ import CustomerSearchModal from '../components/CustomerSearchModal';
 import Tooltip from '../components/Tooltip';
 
 const today = () => new Date().toISOString().slice(0, 10);
+const DISABLED_CATS = ['동자재', '기타', '광점퍼코드류'];
 
 const INITIAL = {
   customer_group:      '',
@@ -297,7 +298,14 @@ export default function NewClaim() {
                     <Tooltip key={t} text={tips[t] || ''}>
                       <button
                         type="button"
-                        onClick={() => setForm(prev => ({ ...prev, product_type: prev.product_type === t ? '' : t }))}
+                        onClick={() => setForm(prev => {
+                          const next = prev.product_type === t ? '' : t;
+                          return {
+                            ...prev,
+                            product_type: next,
+                            product_category: next === '자체제작상품' && DISABLED_CATS.includes(prev.product_category) ? '' : prev.product_category,
+                          };
+                        })}
                         style={{
                           padding: '6px 20px', borderRadius: 20, fontSize: 13, fontWeight: 600,
                           cursor: 'pointer', border: '1.5px solid',
@@ -315,20 +323,25 @@ export default function NewClaim() {
             <div className="form-group form-span-4">
               <label>품목군 <span className="required-star">*</span></label>
               <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                {PRODUCT_CATEGORIES.map(c => (
-                  <button
-                    key={c} type="button"
-                    onClick={() => setForm(prev => ({ ...prev, product_category: prev.product_category === c ? '' : c }))}
-                    style={{
-                      padding: '6px 20px', borderRadius: 20, fontSize: 13, fontWeight: 600,
-                      cursor: 'pointer', border: '1.5px solid',
-                      background: form.product_category === c ? '#7c3aed' : '#fff',
-                      color: form.product_category === c ? '#fff' : '#64748b',
-                      borderColor: form.product_category === c ? '#7c3aed' : '#e2e8f0',
-                      transition: '.15s', fontFamily: 'inherit',
-                    }}
-                  >{c}</button>
-                ))}
+                {PRODUCT_CATEGORIES.map(c => {
+                  const disabled = form.product_type === '자체제작상품' && DISABLED_CATS.includes(c);
+                  return (
+                    <button
+                      key={c} type="button"
+                      disabled={disabled}
+                      onClick={() => setForm(prev => ({ ...prev, product_category: prev.product_category === c ? '' : c }))}
+                      style={{
+                        padding: '6px 20px', borderRadius: 20, fontSize: 13, fontWeight: 600,
+                        cursor: disabled ? 'not-allowed' : 'pointer', border: '1.5px solid',
+                        opacity: disabled ? 0.35 : 1,
+                        background: form.product_category === c ? '#7c3aed' : '#fff',
+                        color: form.product_category === c ? '#fff' : '#64748b',
+                        borderColor: form.product_category === c ? '#7c3aed' : '#e2e8f0',
+                        transition: '.15s', fontFamily: 'inherit',
+                      }}
+                    >{c}</button>
+                  );
+                })}
               </div>
             </div>
           </div>

@@ -28,6 +28,7 @@ function fmtSize(b) {
 }
 
 const today = () => new Date().toISOString().slice(0, 10);
+const DISABLED_CATS = ['동자재', '기타', '광점퍼코드류'];
 
 const INITIAL = {
   supplier_name:       '',
@@ -254,7 +255,10 @@ export default function NewSupplierClaim() {
               <label>품목 유형</label>
               <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
                 {PRODUCT_TYPES.map(t => (
-                  <button key={t} type="button" onClick={() => toggleBtn('product_type', t)}
+                  <button key={t} type="button" onClick={() => setForm(prev => {
+                      const next = prev.product_type === t ? '' : t;
+                      return { ...prev, product_type: next, product_category: next === '자체제작상품' && DISABLED_CATS.includes(prev.product_category) ? '' : prev.product_category };
+                    })}
                     style={{ padding: '6px 20px', borderRadius: 20, fontSize: 13, fontWeight: 600, cursor: 'pointer', border: '1.5px solid', fontFamily: 'inherit', transition: '.15s', background: form.product_type === t ? '#2563eb' : '#fff', color: form.product_type === t ? '#fff' : '#64748b', borderColor: form.product_type === t ? '#2563eb' : '#e2e8f0' }}>{t}</button>
                 ))}
               </div>
@@ -262,10 +266,15 @@ export default function NewSupplierClaim() {
             <div className="form-group form-span-4">
               <label>품목군</label>
               <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                {PRODUCT_CATEGORIES.map(c => (
-                  <button key={c} type="button" onClick={() => toggleBtn('product_category', c)}
-                    style={{ padding: '6px 20px', borderRadius: 20, fontSize: 13, fontWeight: 600, cursor: 'pointer', border: '1.5px solid', fontFamily: 'inherit', transition: '.15s', background: form.product_category === c ? '#7c3aed' : '#fff', color: form.product_category === c ? '#fff' : '#64748b', borderColor: form.product_category === c ? '#7c3aed' : '#e2e8f0' }}>{c}</button>
-                ))}
+                {PRODUCT_CATEGORIES.map(c => {
+                  const disabled = form.product_type === '자체제작상품' && DISABLED_CATS.includes(c);
+                  return (
+                    <button key={c} type="button"
+                      disabled={disabled}
+                      onClick={() => !disabled && toggleBtn('product_category', c)}
+                      style={{ padding: '6px 20px', borderRadius: 20, fontSize: 13, fontWeight: 600, cursor: disabled ? 'not-allowed' : 'pointer', border: '1.5px solid', fontFamily: 'inherit', transition: '.15s', opacity: disabled ? 0.35 : 1, background: form.product_category === c ? '#7c3aed' : '#fff', color: form.product_category === c ? '#fff' : '#64748b', borderColor: form.product_category === c ? '#7c3aed' : '#e2e8f0' }}>{c}</button>
+                  );
+                })}
               </div>
             </div>
 
