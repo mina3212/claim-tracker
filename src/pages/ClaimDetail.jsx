@@ -13,6 +13,38 @@ import DeleteRequestModal from '../components/DeleteRequestModal';
 
 const CAUSES = ['사용자 과실', '생산공정', '제품불량', '구조불량', '배송오류', '기타'];
 
+function parseDefect(desc) {
+  if (!desc) return { symptom: '', situation: '', request: '', legacy: false };
+  if (desc.includes('[불량증상]')) {
+    const get = (tag) => {
+      const re = new RegExp(`\\[${tag}\\]\\n([\\s\\S]*?)(?=\\n\\n\\[|$)`);
+      const m = desc.match(re);
+      return m ? m[1].trim() : '';
+    };
+    return { symptom: get('불량증상'), situation: get('발생상황'), request: get('고객요청사항'), legacy: false };
+  }
+  return { symptom: desc, situation: '', request: '', legacy: true };
+}
+
+function buildDefectDescription(symptom, situation, request) {
+  const parts = [];
+  if (symptom.trim())   parts.push(`[불량증상]\n${symptom.trim()}`);
+  if (situation.trim()) parts.push(`[발생상황]\n${situation.trim()}`);
+  if (request.trim())   parts.push(`[고객요청사항]\n${request.trim()}`);
+  return parts.join('\n\n');
+}
+
+function DefectBox({ label, text, color, labelColor }) {
+  return (
+    <div style={{ background: color, borderRadius: 8, padding: '10px 14px', minHeight: 70 }}>
+      <div style={{ fontSize: 11, fontWeight: 700, color: labelColor, marginBottom: 6, letterSpacing: 0.3 }}>{label}</div>
+      <div style={{ fontSize: 13, color: '#374151', whiteSpace: 'pre-wrap', lineHeight: 1.6 }}>
+        {text || <span style={{ color: '#94a3b8' }}>없음</span>}
+      </div>
+    </div>
+  );
+}
+
 function makeMailtoLink(claim, notifyEmails) {
   const NOTIFY_TO = notifyEmails.length > 0 ? notifyEmails.join(',') : '';
   const defRate = (() => {
@@ -222,6 +254,7 @@ export default function ClaimDetail() {
 
   /* ── 수정 모드 시작 ── */
   const startEdit = () => {
+    const d = parseDefect(claim.defect_description);
     setEditForm({
       customer_group:     claim.customer_group    || '',
       customer_name:      claim.customer_name     || '',
@@ -237,7 +270,9 @@ export default function ClaimDetail() {
       quantity:           claim.quantity    != null ? String(claim.quantity)    : '',
       lot_number:         claim.lot_number        || '',
       defect_quantity:    claim.defect_quantity != null ? String(claim.defect_quantity) : '',
-      defect_description: claim.defect_description || '',
+      defect_symptom:     d.symptom,
+      defect_situation:   d.situation,
+      customer_request:   d.request,
     });
     setEditMode(true);
   };
@@ -267,7 +302,7 @@ export default function ClaimDetail() {
   /* ── 수정 저장 ── */
   const handleSave = async () => {
     if (!editForm.customer_name.trim()) { toast('입력 오류', '고객사명을 입력하세요', 'error'); return; }
-    if (!editForm.defect_description.trim()) { toast('입력 오류', '불량내용을 입력하세요', 'error'); return; }
+    if (!editForm.defect_symptom.trim()) { toast('입력 오류', '불량증상을 입력하세요', 'error'); return; }
     setSaving(true);
     try {
       const payload = {
@@ -285,7 +320,7 @@ export default function ClaimDetail() {
         quantity:           editForm.quantity    !== '' ? parseInt(editForm.quantity)    : null,
         lot_number:         editForm.lot_number.trim()        || null,
         defect_quantity:    editForm.defect_quantity !== '' ? parseInt(editForm.defect_quantity) : null,
-        defect_description: editForm.defect_description.trim(),
+        defect_description: buildDefectDescription(editForm.defect_symptom, editForm.defect_situation, editForm.customer_request),
       };
       await updateClaim(id, payload);
       updateClaimData(id, payload);
@@ -767,8 +802,16 @@ export default function ClaimDetail() {
                 })()}
               </div>
               <div className="form-group form-span-4">
-                <label>불량 내용 <span className="required-star">*</span></label>
-                <textarea rows={3} value={editForm.defect_description} onChange={setEF('defect_description')} placeholder="불량 내용을 상세하게 입력하세요" style={{ resize: 'vertical', width: '100%' }} />
+                <label>불량증상 <span className="required-star">*</span></label>
+                <textarea rows={3} value={editForm.defect_symptom} onChange={setEF('defect_symptom')} placeholder="불량 증상을 상세히 입력하세요" style={{ resize: 'vertical', width: '100%' }} />
+              </div>
+              <div className="form-group form-span-2">
+                <label>발생상황</label>
+                <textarea rows={3} value={editForm.defect_situation} onChange={setEF('defect_situation')} placeholder="없으면 '없음'으로 입력하세요" style={{ resize: 'vertical', width: '100%' }} />
+              </div>
+              <div className="form-group form-span-2">
+                <label>고객요청사항</label>
+                <textarea rows={3} value={editForm.customer_request} onChange={setEF('customer_request')} placeholder="없으면 '없음'으로 입력하세요" style={{ resize: 'vertical', width: '100%' }} />
               </div>
             </div>
           </div>
@@ -791,7 +834,6 @@ export default function ClaimDetail() {
               { label: '영업 부서',     value: claim.sales_rep_dept || '-' },
               { label: '영업담당자',    value: claim.sales_rep_name || '-' },
               { label: '담당자 연락처', value: claim.sales_rep_contact || '-' },
-              { label: '불량 내용',     value: claim.defect_description || '-', span: 2 },
             ].map((item, idx) => (
               <div key={idx} className={`info-item${item.span === 2 ? ' info-span-2' : ''}`}>
                 <span className="info-label">{item.label}</span>
@@ -816,6 +858,27 @@ export default function ClaimDetail() {
             ))}
           </div>
         )}
+
+        {/* 불량 내용 3칸 섹션 (뷰 모드에서만 표시) */}
+        {!editMode && claim.defect_description && (() => {
+          const d = parseDefect(claim.defect_description);
+          return (
+            <div style={{ marginTop: 14, borderTop: '1px solid #f1f5f9', paddingTop: 14 }}>
+              <div style={{ fontSize: 11, fontWeight: 700, color: '#94a3b8', marginBottom: 10, letterSpacing: 0.5 }}>불량 내용</div>
+              {d.legacy ? (
+                <div style={{ fontSize: 13, color: '#374151', whiteSpace: 'pre-wrap', lineHeight: 1.6 }}>
+                  {d.symptom}
+                </div>
+              ) : (
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 10 }}>
+                  <DefectBox label="불량증상" text={d.symptom} color="#eff6ff" labelColor="#1e40af" />
+                  <DefectBox label="발생상황" text={d.situation} color="#f0fdf4" labelColor="#166534" />
+                  <DefectBox label="고객요청사항" text={d.request} color="#fff7ed" labelColor="#c2410c" />
+                </div>
+              )}
+            </div>
+          );
+        })()}
       </div>
 
       {/* 처리 단계 */}

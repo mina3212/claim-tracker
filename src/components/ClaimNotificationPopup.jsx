@@ -15,6 +15,15 @@ export default function ClaimNotificationPopup({ notifications, onDismiss }) {
   );
 }
 
+function extractSymptom(desc) {
+  if (!desc) return '';
+  if (desc.includes('[불량증상]')) {
+    const m = desc.match(/\[불량증상\]\n([\s\S]*?)(?=\n\n\[|$)/);
+    return m ? m[1].trim() : desc;
+  }
+  return desc;
+}
+
 function NotificationCard({ notification: n, onDismiss, navigate }) {
   const [visible, setVisible] = useState(false);
 
@@ -64,7 +73,7 @@ function NotificationCard({ notification: n, onDismiss, navigate }) {
             )}
             {n.defect_description && (
               <div style={{ fontSize: 12, color: '#475569', marginTop: 4, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
-                {n.defect_description}
+                {extractSymptom(n.defect_description)}
               </div>
             )}
           </div>

@@ -24,8 +24,18 @@ const INITIAL = {
   product_category:    '',
   shipping_warehouse:  '',
   defect_quantity:     '',
-  defect_description:  '',
+  defect_symptom:      '',
+  defect_situation:    '',
+  customer_request:    '',
 };
+
+function buildDefectDescription(symptom, situation, request) {
+  const parts = [];
+  if (symptom.trim())   parts.push(`[불량증상]\n${symptom.trim()}`);
+  if (situation.trim()) parts.push(`[발생상황]\n${situation.trim()}`);
+  if (request.trim())   parts.push(`[고객요청사항]\n${request.trim()}`);
+  return parts.join('\n\n');
+}
 
 const EMPTY_SHIPMENT = () => ({ shipping_date: '', quantity: '', lot_number: '' });
 
@@ -88,7 +98,7 @@ export default function NewClaim() {
 
     if (form.defect_quantity === '')   { toast('입력 오류', '불량 수량을 입력하세요', 'error'); return; }
     if (defQty > totalQty)             { toast('입력 오류', '불량 수량이 출고 수량 합계보다 클 수 없습니다', 'error'); return; }
-    if (!form.defect_description.trim()){ toast('입력 오류', '불량 내용을 입력하세요', 'error'); return; }
+    if (!form.defect_symptom.trim())     { toast('입력 오류', '불량증상을 입력하세요', 'error'); return; }
 
     const lotNumbers     = shipments.map(s => s.lot_number.trim()).filter(Boolean).join(', ');
     const firstShipment  = shipments[0];
@@ -103,7 +113,7 @@ export default function NewClaim() {
         customer_group:      form.customer_group || null,
         product_type:        form.product_type || null,
         product_category:    form.product_category || null,
-        defect_description:  form.defect_description.trim(),
+        defect_description:  buildDefectDescription(form.defect_symptom, form.defect_situation, form.customer_request),
         sales_rep_dept:      form.sales_rep_dept || null,
         sales_rep_name:      form.sales_rep_name,
         sales_rep_contact:   form.sales_rep_contact.trim(),
@@ -359,15 +369,39 @@ export default function NewClaim() {
               </div>
             </div>
 
-            {/* 불량 내용 텍스트 */}
+            {/* 불량증상 */}
             <div className="form-group form-span-4">
-              <label>불량 내용 상세 <span className="required-star">*</span></label>
+              <label>불량증상 <span className="required-star">*</span></label>
               <textarea
                 rows={4}
-                placeholder="불량 증상, 발생 상황, 고객 요청 사항 등을 상세히 입력하세요"
-                value={form.defect_description}
-                onChange={set('defect_description')}
+                placeholder="불량 증상을 상세히 입력하세요"
+                value={form.defect_symptom}
+                onChange={set('defect_symptom')}
                 required
+                style={{ resize: 'vertical' }}
+              />
+            </div>
+
+            {/* 발생상황 */}
+            <div className="form-group form-span-2">
+              <label>발생상황</label>
+              <textarea
+                rows={3}
+                placeholder="없으면 '없음'으로 입력하세요"
+                value={form.defect_situation}
+                onChange={set('defect_situation')}
+                style={{ resize: 'vertical' }}
+              />
+            </div>
+
+            {/* 고객요청사항 */}
+            <div className="form-group form-span-2">
+              <label>고객요청사항</label>
+              <textarea
+                rows={3}
+                placeholder="없으면 '없음'으로 입력하세요"
+                value={form.customer_request}
+                onChange={set('customer_request')}
                 style={{ resize: 'vertical' }}
               />
             </div>
