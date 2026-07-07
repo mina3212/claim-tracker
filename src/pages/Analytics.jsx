@@ -711,9 +711,13 @@ export default function Analytics() {
                                 : <span style={{ color: '#10b981', fontWeight: 600 }}>-</span>}
                             </td>
                             <td style={thStyle}><span style={{ fontWeight: 700, color: closeColor(item.closeRate) }}>{item.closeRate}%</span></td>
-                            <td style={thStyle}>
-                              {item.topCause
-                                ? <span style={{ fontSize: 10, padding: '2px 6px', borderRadius: 4, background: '#fef3c7', color: '#92400e', fontWeight: 600, whiteSpace: 'nowrap' }}>{item.topCause}</span>
+                            <td>
+                              {Object.keys(item.causeCnt || {}).length > 0
+                                ? Object.entries(item.causeCnt).sort(([,a],[,b]) => b-a).map(([cause, cnt]) => (
+                                    <span key={cause} style={{ display: 'inline-block', fontSize: 10, padding: '2px 5px', borderRadius: 4, background: '#fef3c7', color: '#92400e', fontWeight: 600, marginRight: 3, marginBottom: 2, whiteSpace: 'nowrap' }}>
+                                      {cause}{Object.keys(item.causeCnt).length > 1 ? ` ${cnt}` : ''}
+                                    </span>
+                                  ))
                                 : <span style={{ color: '#e2e8f0' }}>-</span>}
                             </td>
                             <td style={{ fontSize: 11, color: '#475569' }}>
