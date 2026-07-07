@@ -65,6 +65,8 @@ export const signIn  = (email, pw) => sb.auth.signInWithPassword({ email, passwo
 export const signOut = () => sb.auth.signOut();
 export const signUp  = (email, pw, name) =>
   sb.auth.signUp({ email, password: pw, options: { data: { name } } });
+export const resetPassword = (email) =>
+  sb.auth.resetPasswordForEmail(email, { redirectTo: window.location.origin });
 
 export async function getProfile(userId) {
   const { data } = await sb.from('profiles').select('*').eq('id', userId).single();

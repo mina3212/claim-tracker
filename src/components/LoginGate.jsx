@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { signIn, signUp, upsertProfile, DEPARTMENTS } from '../lib/supabase';
+import { signIn, signUp, upsertProfile, resetPassword, DEPARTMENTS } from '../lib/supabase';
 import { useToast } from '../context/ToastContext';
 
 const FF = "'Inter','Nanum Gothic',sans-serif";
@@ -46,8 +46,9 @@ export default function LoginGate() {
   const [dept,     setDept]     = useState('');
   const [loading,  setLoading]  = useState(false);
   const [error,    setError]    = useState('');
+  const [resetSent, setResetSent] = useState(false);
 
-  const reset = () => { setError(''); setPassword(''); setConfirm(''); };
+  const reset = () => { setError(''); setPassword(''); setConfirm(''); setResetSent(false); };
 
   const handleLogin = async (e) => {
     e.preventDefault();
@@ -57,6 +58,20 @@ export default function LoginGate() {
       const { error: err } = await signIn(email, password);
       if (err) { setError('이메일 또는 비밀번호가 올바르지 않습니다.'); return; }
       toast('로그인 완료', '환영합니다!', 'success');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleResetPassword = async (e) => {
+    e.preventDefault();
+    setError('');
+    if (!email) { setError('이메일을 입력해 주세요.'); return; }
+    setLoading(true);
+    try {
+      const { error: err } = await resetPassword(email);
+      if (err) { setError('이메일 전송에 실패했습니다. 이메일 주소를 확인해 주세요.'); return; }
+      setResetSent(true);
     } finally {
       setLoading(false);
     }
@@ -145,10 +160,12 @@ export default function LoginGate() {
 
           <div style={{ marginBottom: 28 }}>
             <div style={{ fontSize: 24, fontWeight: 800, color: '#0f172a', marginBottom: 6 }}>
-              {tab === 'login' ? '로그인' : '회원가입'}
+              {tab === 'login' ? '로그인' : tab === 'signup' ? '회원가입' : '비밀번호 찾기'}
             </div>
             <div style={{ fontSize: 13, color: '#94a3b8' }}>
-              {tab === 'login' ? '계정 정보를 입력하여 로그인하세요' : '새 계정을 만들어 시작하세요'}
+              {tab === 'login' ? '계정 정보를 입력하여 로그인하세요'
+                : tab === 'signup' ? '새 계정을 만들어 시작하세요'
+                : '가입하신 이메일로 재설정 링크를 보내드립니다'}
             </div>
           </div>
 
@@ -157,12 +174,12 @@ export default function LoginGate() {
             display: 'flex', background: '#f1f5f9', borderRadius: 12,
             padding: 4, marginBottom: 28, gap: 4,
           }}>
-            {[['login', '🔐 로그인'], ['signup', '✏️ 회원가입']].map(([key, label]) => (
+            {[['login', '🔐 로그인'], ['signup', '✏️ 회원가입'], ['forgot', '🔑 비밀번호 찾기']].map(([key, label]) => (
               <button
                 key={key}
                 onClick={() => { setTab(key); reset(); }}
                 style={{
-                  flex: 1, padding: '9px 0', fontSize: 13, fontWeight: 600,
+                  flex: 1, padding: '9px 0', fontSize: 12, fontWeight: 600,
                   border: 'none', borderRadius: 9, cursor: 'pointer', fontFamily: FF,
                   background: tab === key ? '#fff' : 'transparent',
                   color: tab === key ? '#0f172a' : '#94a3b8',
@@ -221,6 +238,53 @@ export default function LoginGate() {
               </div>
               <SubmitBtn loading={loading}>회원가입</SubmitBtn>
             </form>
+          )}
+
+          {/* 비밀번호 찾기 폼 */}
+          {tab === 'forgot' && (
+            resetSent ? (
+              <div style={{ textAlign: 'center', padding: '20px 0' }}>
+                <div style={{ fontSize: 48, marginBottom: 16 }}>📧</div>
+                <div style={{ fontSize: 16, fontWeight: 700, color: '#0f172a', marginBottom: 8 }}>
+                  이메일을 확인해 주세요
+                </div>
+                <div style={{ fontSize: 13, color: '#64748b', lineHeight: 1.7, marginBottom: 24 }}>
+                  <strong>{email}</strong> 으로<br />
+                  비밀번호 재설정 링크를 보냈습니다.<br />
+                  링크를 클릭하면 새 비밀번호를 설정할 수 있습니다.
+                </div>
+                <button
+                  onClick={() => { setTab('login'); reset(); }}
+                  style={{
+                    padding: '10px 24px', borderRadius: 10, border: '1.5px solid #e2e8f0',
+                    fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: FF,
+                    background: '#fff', color: '#475569',
+                  }}
+                >
+                  로그인으로 돌아가기
+                </button>
+              </div>
+            ) : (
+              <form onSubmit={handleResetPassword} style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
+                <InputField label="가입한 이메일" required>
+                  <FocusInput type="email" placeholder="example@ajw.co.kr" value={email} onChange={e => setEmail(e.target.value)} autoFocus required />
+                </InputField>
+                <div style={{ fontSize: 12, color: '#94a3b8', marginTop: -8 }}>
+                  입력한 이메일로 비밀번호 재설정 링크가 전송됩니다.
+                </div>
+                <SubmitBtn loading={loading}>재설정 링크 보내기</SubmitBtn>
+                <button
+                  type="button"
+                  onClick={() => { setTab('login'); reset(); }}
+                  style={{
+                    background: 'none', border: 'none', fontSize: 13, color: '#94a3b8',
+                    cursor: 'pointer', fontFamily: FF, textDecoration: 'underline',
+                  }}
+                >
+                  로그인으로 돌아가기
+                </button>
+              </form>
+            )
           )}
 
           <div style={{ marginTop: 24, textAlign: 'center', fontSize: 11, color: '#cbd5e1' }}>
