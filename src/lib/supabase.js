@@ -44,7 +44,7 @@ export const IMPROVEMENT_STATUS_COLORS = {
   '완료':   { bg: '#d1fae5', text: '#065f46' },
 };
 export const DISPOSITION_TYPES   = ['사용승인', '반품(대체품)', '폐기', '재작업', '선별작업'];
-export const PURCHASE_DEPTS      = ['구매/SCM팀', '마케팅팀(수입)'];
+export const PURCHASE_DEPTS      = ['SCM팀(내수)', '마케팅팀(수입)'];
 
 export const DISPOSITION_COLORS = {
   '사용승인':   { bg: '#d1fae5', text: '#065f46' },

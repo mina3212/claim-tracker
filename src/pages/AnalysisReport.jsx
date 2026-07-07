@@ -212,11 +212,11 @@ function generateLocalReport(filteredC, filteredS, start, end, stages) {
   if (cByCause.length > 0)
     recs.push(`**[품질기술팀]** 주요 원인 "${cByCause[0][0]}" 재발방지 대책의 현장 적용 여부를 확인하고, 개선 효과를 수치로 측정할 기준을 마련하세요.`);
   if (sBySupplier.length > 0)
-    recs.push(`**[구매/SCM팀]** 불량 상위 공급사(${sBySupplier.slice(0, 2).map(([n]) => n).join(', ')})에 대해 공식 클레임 통보 및 시정조치 요구서를 발행하고 다음 입고 시 전수검사를 실시하세요.`);
+    recs.push(`**[SCM팀(내수)]** 불량 상위 공급사(${sBySupplier.slice(0, 2).map(([n]) => n).join(', ')})에 대해 공식 클레임 통보 및 시정조치 요구서를 발행하고 다음 입고 시 전수검사를 실시하세요.`);
   if (sNoAction >= 2)
     recs.push(`**[품질기술팀]** 시정조치 미등록 ${sNoAction}건에 대해 조치 유형(공급사 클레임·작업자 교육·공정 변경 등)을 등록하고 완료 일정을 수립하세요.`);
   if (parseFloat(defRate) > 3)
-    recs.push(`**[구매/SCM팀·품질기술팀]** 공급사 정기 품질 평가 주기를 단축하고, 불량률 기준(예: 3% 초과 시 경고, 5% 초과 시 거래 재검토) 관리 기준을 내규화하세요.`);
+    recs.push(`**[SCM팀(내수)·품질기술팀]** 공급사 정기 품질 평가 주기를 단축하고, 불량률 기준(예: 3% 초과 시 경고, 5% 초과 시 거래 재검토) 관리 기준을 내규화하세요.`);
 
   if (recs.length === 0)
     recs.push('데이터가 충분하지 않아 구체적 권고사항을 도출하기 어렵습니다. 더 많은 데이터가 누적된 후 재분석을 권장합니다.');
