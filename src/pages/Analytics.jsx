@@ -15,6 +15,14 @@ const COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#8b5cf6', '#f97316', '#ef4444'
 const CAUSE_OPTIONS = ['사용자 과실', '생산공정', '제품불량', '구조불량', '배송오류', '기타'];
 const TABS = ['고객사별', '품목별', '그룹별', '품목군별', '원인별', '월별 추이'];
 
+// Y축 레이블: 최대 글자 수 제한 + 동적 너비 계산
+const truncLabel = (str, max = 16) => !str ? '' : str.length > max ? str.slice(0, max) + '…' : str;
+const yAxisW = (data, key = 'name', max = 16) => {
+  if (!data?.length) return 80;
+  const longest = Math.max(...data.map(d => Math.min((d[key] || '').length, max)));
+  return Math.max(longest * 7.5 + 8, 60);
+};
+
 function parseCauses(description) {
   if (!description) return [];
   const m = description.match(/\[원인\]\s*([^\n]+)/);
@@ -728,15 +736,20 @@ export default function Analytics() {
           {customerAnalysis.length > 0 && (
             <div className="card">
               <div className="card-title">🏢 고객사별 클레임 건수</div>
-              <ResponsiveContainer width="100%" height={220}>
-                <BarChart data={customerAnalysis.slice(0, 10).map(c => ({ name: c.name, count: c.total }))} layout="vertical" margin={{ top: 4, right: 16, bottom: 4, left: 0 }}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
-                  <XAxis type="number" tick={{ fontSize: 11 }} allowDecimals={false} />
-                  <YAxis type="category" dataKey="name" tick={{ fontSize: 11 }} width={90} />
-                  <Tooltip formatter={v => [v + '건', '클레임']} />
-                  <Bar dataKey="count" fill="#8b5cf6" radius={[0, 4, 4, 0]} />
-                </BarChart>
-              </ResponsiveContainer>
+              {(() => {
+                const d = customerAnalysis.slice(0, 10).map(c => ({ name: truncLabel(c.name), count: c.total }));
+                return (
+                  <ResponsiveContainer width="100%" height={Math.max(d.length * 32 + 20, 200)}>
+                    <BarChart data={d} layout="vertical" margin={{ top: 4, right: 16, bottom: 4, left: 4 }}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
+                      <XAxis type="number" tick={{ fontSize: 11 }} allowDecimals={false} />
+                      <YAxis type="category" dataKey="name" tick={{ fontSize: 11 }} width={yAxisW(d)} />
+                      <Tooltip formatter={v => [v + '건', '클레임']} />
+                      <Bar dataKey="count" fill="#8b5cf6" radius={[0, 4, 4, 0]} />
+                    </BarChart>
+                  </ResponsiveContainer>
+                );
+              })()}
             </div>
           )}
         </div>
@@ -792,17 +805,22 @@ export default function Analytics() {
           {partAnalysis.length > 0 && (
             <div className="card">
               <div className="card-title">🔩 품목별 클레임 건수 (상위 10)</div>
-              <ResponsiveContainer width="100%" height={220}>
-                <BarChart data={partAnalysis.slice(0, 10).map(p => ({ name: p.part_name || p.part_number, count: p.total }))} layout="vertical" margin={{ top: 4, right: 16, bottom: 4, left: 0 }}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
-                  <XAxis type="number" tick={{ fontSize: 11 }} allowDecimals={false} />
-                  <YAxis type="category" dataKey="name" tick={{ fontSize: 11 }} width={100} />
-                  <Tooltip formatter={v => [v + '건', '클레임']} />
-                  <Bar dataKey="count" radius={[0, 4, 4, 0]}>
-                    {partAnalysis.slice(0, 10).map((_, i) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}
-                  </Bar>
-                </BarChart>
-              </ResponsiveContainer>
+              {(() => {
+                const d = partAnalysis.slice(0, 10).map(p => ({ name: truncLabel(p.part_name || p.part_number), count: p.total }));
+                return (
+                  <ResponsiveContainer width="100%" height={Math.max(d.length * 32 + 20, 200)}>
+                    <BarChart data={d} layout="vertical" margin={{ top: 4, right: 16, bottom: 4, left: 4 }}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
+                      <XAxis type="number" tick={{ fontSize: 11 }} allowDecimals={false} />
+                      <YAxis type="category" dataKey="name" tick={{ fontSize: 11 }} width={yAxisW(d)} />
+                      <Tooltip formatter={v => [v + '건', '클레임']} />
+                      <Bar dataKey="count" radius={[0, 4, 4, 0]}>
+                        {partAnalysis.slice(0, 10).map((_, i) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}
+                      </Bar>
+                    </BarChart>
+                  </ResponsiveContainer>
+                );
+              })()}
             </div>
           )}
         </div>
@@ -870,32 +888,42 @@ export default function Analytics() {
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
               <div className="card">
                 <div className="card-title">📊 그룹별 클레임 건수</div>
-                <ResponsiveContainer width="100%" height={220}>
-                  <BarChart data={groupAnalysis.map(g => ({ name: g.name, count: g.total }))} layout="vertical" margin={{ top: 4, right: 16, bottom: 4, left: 0 }}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
-                    <XAxis type="number" tick={{ fontSize: 11 }} allowDecimals={false} />
-                    <YAxis type="category" dataKey="name" tick={{ fontSize: 11 }} width={70} />
-                    <Tooltip formatter={v => [v + '건', '클레임']} />
-                    <Bar dataKey="count" radius={[0, 4, 4, 0]}>
-                      {groupAnalysis.map((_, i) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}
-                    </Bar>
-                  </BarChart>
-                </ResponsiveContainer>
+                {(() => {
+                  const d = groupAnalysis.map(g => ({ name: truncLabel(g.name, 20), count: g.total }));
+                  return (
+                    <ResponsiveContainer width="100%" height={Math.max(d.length * 32 + 20, 160)}>
+                      <BarChart data={d} layout="vertical" margin={{ top: 4, right: 16, bottom: 4, left: 4 }}>
+                        <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
+                        <XAxis type="number" tick={{ fontSize: 11 }} allowDecimals={false} />
+                        <YAxis type="category" dataKey="name" tick={{ fontSize: 11 }} width={yAxisW(d, 'name', 20)} />
+                        <Tooltip formatter={v => [v + '건', '클레임']} />
+                        <Bar dataKey="count" radius={[0, 4, 4, 0]}>
+                          {groupAnalysis.map((_, i) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}
+                        </Bar>
+                      </BarChart>
+                    </ResponsiveContainer>
+                  );
+                })()}
               </div>
 
               <div className="card">
                 <div className="card-title">📊 그룹별 종결율</div>
-                <ResponsiveContainer width="100%" height={220}>
-                  <BarChart data={groupAnalysis.map(g => ({ name: g.name, rate: g.closeRate }))} layout="vertical" margin={{ top: 4, right: 16, bottom: 4, left: 0 }}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
-                    <XAxis type="number" tick={{ fontSize: 11 }} domain={[0, 100]} tickFormatter={v => v + '%'} />
-                    <YAxis type="category" dataKey="name" tick={{ fontSize: 11 }} width={70} />
-                    <Tooltip formatter={v => [v + '%', '종결율']} />
-                    <Bar dataKey="rate" radius={[0, 4, 4, 0]}>
-                      {groupAnalysis.map((g, i) => <Cell key={i} fill={closeColor(g.closeRate)} />)}
-                    </Bar>
-                  </BarChart>
-                </ResponsiveContainer>
+                {(() => {
+                  const d = groupAnalysis.map(g => ({ name: truncLabel(g.name, 20), rate: g.closeRate }));
+                  return (
+                    <ResponsiveContainer width="100%" height={Math.max(d.length * 32 + 20, 160)}>
+                      <BarChart data={d} layout="vertical" margin={{ top: 4, right: 16, bottom: 4, left: 4 }}>
+                        <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
+                        <XAxis type="number" tick={{ fontSize: 11 }} domain={[0, 100]} tickFormatter={v => v + '%'} />
+                        <YAxis type="category" dataKey="name" tick={{ fontSize: 11 }} width={yAxisW(d, 'name', 20)} />
+                        <Tooltip formatter={v => [v + '%', '종결율']} />
+                        <Bar dataKey="rate" radius={[0, 4, 4, 0]}>
+                          {groupAnalysis.map((g, i) => <Cell key={i} fill={closeColor(g.closeRate)} />)}
+                        </Bar>
+                      </BarChart>
+                    </ResponsiveContainer>
+                  );
+                })()}
               </div>
             </div>
           )}
@@ -960,31 +988,41 @@ export default function Analytics() {
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
               <div className="card">
                 <div className="card-title">📊 품목군별 클레임 건수</div>
-                <ResponsiveContainer width="100%" height={240}>
-                  <BarChart data={productCategoryAnalysis.map(c => ({ name: c.name, count: c.total }))} layout="vertical" margin={{ top: 4, right: 16, bottom: 4, left: 0 }}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
-                    <XAxis type="number" tick={{ fontSize: 11 }} allowDecimals={false} />
-                    <YAxis type="category" dataKey="name" tick={{ fontSize: 11 }} width={90} />
-                    <Tooltip formatter={v => [v + '건', '클레임']} />
-                    <Bar dataKey="count" radius={[0, 4, 4, 0]}>
-                      {productCategoryAnalysis.map((_, i) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}
-                    </Bar>
-                  </BarChart>
-                </ResponsiveContainer>
+                {(() => {
+                  const d = productCategoryAnalysis.map(c => ({ name: truncLabel(c.name, 20), count: c.total }));
+                  return (
+                    <ResponsiveContainer width="100%" height={Math.max(d.length * 32 + 20, 160)}>
+                      <BarChart data={d} layout="vertical" margin={{ top: 4, right: 16, bottom: 4, left: 4 }}>
+                        <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
+                        <XAxis type="number" tick={{ fontSize: 11 }} allowDecimals={false} />
+                        <YAxis type="category" dataKey="name" tick={{ fontSize: 11 }} width={yAxisW(d, 'name', 20)} />
+                        <Tooltip formatter={v => [v + '건', '클레임']} />
+                        <Bar dataKey="count" radius={[0, 4, 4, 0]}>
+                          {productCategoryAnalysis.map((_, i) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}
+                        </Bar>
+                      </BarChart>
+                    </ResponsiveContainer>
+                  );
+                })()}
               </div>
               <div className="card">
                 <div className="card-title">📊 품목군별 종결율</div>
-                <ResponsiveContainer width="100%" height={240}>
-                  <BarChart data={productCategoryAnalysis.map(c => ({ name: c.name, rate: c.closeRate }))} layout="vertical" margin={{ top: 4, right: 16, bottom: 4, left: 0 }}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
-                    <XAxis type="number" tick={{ fontSize: 11 }} domain={[0, 100]} tickFormatter={v => v + '%'} />
-                    <YAxis type="category" dataKey="name" tick={{ fontSize: 11 }} width={90} />
-                    <Tooltip formatter={v => [v + '%', '종결율']} />
-                    <Bar dataKey="rate" radius={[0, 4, 4, 0]}>
-                      {productCategoryAnalysis.map((c, i) => <Cell key={i} fill={closeColor(c.closeRate)} />)}
-                    </Bar>
-                  </BarChart>
-                </ResponsiveContainer>
+                {(() => {
+                  const d = productCategoryAnalysis.map(c => ({ name: truncLabel(c.name, 20), rate: c.closeRate }));
+                  return (
+                    <ResponsiveContainer width="100%" height={Math.max(d.length * 32 + 20, 160)}>
+                      <BarChart data={d} layout="vertical" margin={{ top: 4, right: 16, bottom: 4, left: 4 }}>
+                        <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
+                        <XAxis type="number" tick={{ fontSize: 11 }} domain={[0, 100]} tickFormatter={v => v + '%'} />
+                        <YAxis type="category" dataKey="name" tick={{ fontSize: 11 }} width={yAxisW(d, 'name', 20)} />
+                        <Tooltip formatter={v => [v + '%', '종결율']} />
+                        <Bar dataKey="rate" radius={[0, 4, 4, 0]}>
+                          {productCategoryAnalysis.map((c, i) => <Cell key={i} fill={closeColor(c.closeRate)} />)}
+                        </Bar>
+                      </BarChart>
+                    </ResponsiveContainer>
+                  );
+                })()}
               </div>
             </div>
           )}
