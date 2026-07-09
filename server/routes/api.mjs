@@ -10,6 +10,16 @@ const router = express.Router();
 
 const uid = () => crypto.randomUUID();
 
+// Supabase 이관 이전 첨부파일이 저장돼 있던 프로젝트(1회성 스토리지 이관용)
+const SUPABASE_URL = 'https://kwryojcreaajcbvblwhl.supabase.co';
+
+async function requireAdmin(req, res, next) {
+  const email = req.session.user?.email;
+  const row = email ? await one('SELECT is_admin FROM profiles WHERE id = $1', [email]) : null;
+  if (!row?.is_admin) return res.status(403).json({ error: '관리자만 사용할 수 있습니다' });
+  next();
+}
+
 // ── 파일 업로드 설정 ──────────────────────────────────────────
 const storage = multer.diskStorage({
   destination(req, file, cb) {
@@ -558,6 +568,42 @@ router.get('/files/*', (req, res) => {
   const absPath = getStoragePath(relPath);
   if (!fs.existsSync(absPath)) return res.status(404).json({ error: '파일 없음' });
   res.sendFile(absPath);
+});
+
+// ── Admin: Supabase Storage 1회성 이관 ──────────────────────────
+// supplier_claim_files.file_path 는 DB만 공유 pg로 이관되고 실제 파일 바이트는
+// Supabase Storage(bucket: supplier-attachments)에 그대로 남아 있어 다운로드가 404났다.
+// 이 서버(운영 컨테이너)의 /data 볼륨에 직접 내려받아 채운다. 완료 후 이 라우트는 제거할 것.
+router.post('/admin/migrate-storage', requireAdmin, async (req, res) => {
+  const serviceKey = req.body?.serviceKey;
+  if (!serviceKey) return res.status(400).json({ error: 'serviceKey 필요' });
+
+  try {
+    const rows = await q(
+      "SELECT id, file_path FROM supplier_claim_files WHERE file_path IS NOT NULL AND file_path !~ '^https?://'"
+    );
+
+    let ok = 0, skip = 0, fail = 0;
+    const failures = [];
+    for (const row of rows) {
+      const absPath = getStoragePath(row.file_path);
+      if (fs.existsSync(absPath)) { skip++; continue; }
+      try {
+        const encoded = row.file_path.split('/').map(encodeURIComponent).join('/');
+        const objRes = await fetch(`${SUPABASE_URL}/storage/v1/object/supplier-attachments/${encoded}`, {
+          headers: { Authorization: `Bearer ${serviceKey}`, apikey: serviceKey },
+        });
+        if (!objRes.ok) throw new Error(`HTTP ${objRes.status}`);
+        ensureDir(path.dirname(absPath));
+        fs.writeFileSync(absPath, Buffer.from(await objRes.arrayBuffer()));
+        ok++;
+      } catch (e) {
+        fail++;
+        failures.push({ id: row.id, file_path: row.file_path, error: e.message });
+      }
+    }
+    res.json({ total: rows.length, ok, skip, fail, failures });
+  } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
 // ── Download Logs ─────────────────────────────────────────────
