@@ -1,5 +1,9 @@
 import pg from 'pg';
-const { Pool } = pg;
+const { Pool, types } = pg;
+
+// pg 기본값은 DATE를 JS Date 객체로 변환 → JSON 직렬화 시 "2024-01-15T00:00:00.000Z" 가 됨.
+// 프론트는 "YYYY-MM-DD" 문자열을 기대하므로 postgres 원본 문자열로 그대로 반환.
+types.setTypeParser(1082, (val) => val);  // DATE
 
 if (!process.env.DATABASE_URL) {
   console.warn('[db] DATABASE_URL 미설정 — dev-data/.db-credentials 또는 환경변수를 확인하세요.');
