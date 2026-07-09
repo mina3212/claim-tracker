@@ -116,7 +116,21 @@ export const DISPOSITION_COLORS = {
 export const canViewSupplierClaims = (department, isAdmin) =>
   isAdmin || department === '품질기술팀' || department === '마케팅팀' || department === 'SCM팀';
 
-export const uid = () => crypto.randomUUID();
+// crypto.randomUUID 는 보안 컨텍스트(HTTPS·localhost)에서만 존재한다. 앱허브는 사내망
+// HTTP(http://10.10.120.21:*)로 서빙되므로 여기선 undefined → getRandomValues 기반
+// UUIDv4 로 폴백(비보안 컨텍스트에서도 동작). 둘 다 없으면 Math.random 최후 폴백.
+export const uid = () => {
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+    return crypto.randomUUID();
+  }
+  const b = new Uint8Array(16);
+  if (typeof crypto !== 'undefined' && crypto.getRandomValues) crypto.getRandomValues(b);
+  else for (let i = 0; i < 16; i++) b[i] = Math.floor(Math.random() * 256);
+  b[6] = (b[6] & 0x0f) | 0x40;   // version 4
+  b[8] = (b[8] & 0x3f) | 0x80;   // variant
+  const h = [...b].map(x => x.toString(16).padStart(2, '0'));
+  return `${h[0]}${h[1]}${h[2]}${h[3]}-${h[4]}${h[5]}-${h[6]}${h[7]}-${h[8]}${h[9]}-${h[10]}${h[11]}${h[12]}${h[13]}${h[14]}${h[15]}`;
+};
 
 // ── Auth (Portal SSO — 로그인/로그아웃은 서버가 처리) ─────────
 export const signIn = () => {

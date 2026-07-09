@@ -74,7 +74,7 @@ app.use('/api', requireAuth, apiRouter);
 
 // ── Static 파일 서빙 (빌드된 React 앱) ───────────────────────
 const distPath = path.join(__dirname, '..', 'dist');
-app.use(express.static(distPath));
+app.use(express.static(distPath, { index: false }));
 
 // ── SPA fallback ──────────────────────────────────────────────
 app.get('*', (req, res) => {

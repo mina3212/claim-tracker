@@ -35,6 +35,16 @@ async function initSchema() {
       created_at TIMESTAMPTZ DEFAULT NOW()
     );
 
+    -- Supabase 시절 profiles.id 는 auth.users.id(uuid)였다. 포털 SSO 전환 후
+    -- 코드는 id 에 이메일을 넣고 조회하므로, 이관된 uuid 값을 이메일로 맞춘다.
+    DO $$ BEGIN
+      IF (SELECT data_type FROM information_schema.columns
+          WHERE table_schema='public' AND table_name='profiles' AND column_name='id') = 'uuid' THEN
+        ALTER TABLE profiles ALTER COLUMN id TYPE text;
+        UPDATE profiles SET id = email WHERE email IS NOT NULL;
+      END IF;
+    END $$;
+
     CREATE TABLE IF NOT EXISTS claims (
       id                 TEXT PRIMARY KEY,
       customer_group     TEXT,

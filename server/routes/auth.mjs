@@ -53,7 +53,7 @@ router.get('/login', (req, res) => {
     scope:         'openid email profile',
     state,
   });
-  res.redirect(`${PORTAL_PUBLIC_URL}/api/oauth/authorize?${params}`);
+  res.redirect(`${PORTAL_PUBLIC_URL}/oauth/authorize?${params}`);
 });
 
 // GET /auth/callback  →  Portal OAuth 콜백
@@ -68,7 +68,7 @@ router.get('/callback', async (req, res) => {
 
   try {
     // 토큰 교환
-    const tokenRes = await fetch(`${PORTAL_INTERNAL_URL}/api/oauth/token`, {
+    const tokenRes = await fetch(`${PORTAL_INTERNAL_URL}/oauth/token`, {
       method:  'POST',
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
       body:    new URLSearchParams({
@@ -83,7 +83,7 @@ router.get('/callback', async (req, res) => {
     const tokens = await tokenRes.json();
 
     // 사용자 정보 조회
-    const userRes = await fetch(`${PORTAL_INTERNAL_URL}/api/oauth/userinfo`, {
+    const userRes = await fetch(`${PORTAL_INTERNAL_URL}/oauth/userinfo`, {
       headers: { Authorization: `Bearer ${tokens.access_token}` },
     });
     if (!userRes.ok) throw new Error('Userinfo fetch failed');
