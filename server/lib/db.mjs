@@ -5,14 +5,19 @@ const { Pool, types } = pg;
 // 프론트는 "YYYY-MM-DD" 문자열을 기대하므로 postgres 원본 문자열로 그대로 반환.
 types.setTypeParser(1082, (val) => val);  // DATE
 
-if (!process.env.DATABASE_URL) {
-  console.warn('[db] DATABASE_URL 미설정 — dev-data/.db-credentials 또는 환경변수를 확인하세요.');
+let pool = null;
+function getPool() {
+  if (!pool) {
+    if (!process.env.DATABASE_URL) {
+      console.warn('[db] DATABASE_URL 미설정 — .db-credentials 또는 환경변수를 확인하세요.');
+    }
+    pool = new Pool({
+      connectionString: process.env.DATABASE_URL || 'postgresql://postgres:dev@localhost:5432/postgres',
+      max: 5,
+    });
+  }
+  return pool;
 }
-
-const pool = new Pool({
-  connectionString: process.env.DATABASE_URL || 'postgresql://postgres:dev@localhost:5432/postgres',
-  max: 5,
-});
 
 let schemaReady = null;
 function ensureDb() {
@@ -20,12 +25,12 @@ function ensureDb() {
   return schemaReady;
 }
 
-export async function q(sql, params = [])   { await ensureDb(); return (await pool.query(sql, params)).rows; }
+export async function q(sql, params = [])   { await ensureDb(); return (await getPool().query(sql, params)).rows; }
 export async function one(sql, params = []) { return (await q(sql, params))[0] ?? null; }
-export async function run(sql, params = []) { await ensureDb(); return pool.query(sql, params); }
+export async function run(sql, params = []) { await ensureDb(); return getPool().query(sql, params); }
 
 async function initSchema() {
-  await pool.query(`
+  await getPool().query(`
     CREATE TABLE IF NOT EXISTS profiles (
       id         TEXT PRIMARY KEY,
       name       TEXT NOT NULL DEFAULT '',
@@ -195,4 +200,3 @@ async function initSchema() {
   `);
 }
 
-export { pool };
