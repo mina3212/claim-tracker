@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import ExcelJS from 'exceljs';
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
-  PieChart, Pie, Cell, Legend,
+  PieChart, Pie, Cell, Legend, ScatterChart, Scatter, ZAxis, ReferenceLine,
 } from 'recharts';
 import { useClaims } from '../context/ClaimsContext';
 import { useAuth } from '../context/AuthContext';
@@ -13,7 +13,7 @@ import { STAGES, STAGE_COLORS, CUSTOMER_GROUPS, PRODUCT_TYPES, PRODUCT_CATEGORIE
 
 const COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#8b5cf6', '#f97316', '#ef4444', '#06b6d4', '#84cc16', '#ec4899', '#64748b'];
 const CAUSE_OPTIONS = ['사용자 과실', '생산공정', '제품불량', '구조불량', '배송오류', '기타'];
-const TABS = ['고객사별', '품목별', '그룹별', '품목군별', '원인별', '월별 추이'];
+const TABS = ['고객사별', '품목별', '그룹별', '품목군별', '원인별', '월별 추이', '연도별 비교', '리드타임', '반복 클레임', '리스크'];
 
 // Y축 레이블: 최대 글자 수 제한 + 동적 너비 계산
 const truncLabel = (str, max = 16) => !str ? '' : str.length > max ? str.slice(0, max) + '…' : str;
@@ -393,6 +393,65 @@ export default function Analytics() {
       .map(([month, count]) => ({ month, count }));
   }, [filteredClaims]);
 
+  /* ── 리드타임: 종결 단계 날짜 맵 ── */
+  const closureMap = useMemo(() => {
+    const m = {};
+    stages.forEach(s => {
+      if (s.stage_name === '종결' && s.stage_date) {
+        if (!m[s.claim_id] || s.stage_date > m[s.claim_id]) m[s.claim_id] = s.stage_date;
+      }
+    });
+    return m;
+  }, [stages]);
+
+  const leadTimeItems = useMemo(() => {
+    const today = new Date().toISOString().slice(0, 10);
+    return filteredClaims.map(c => {
+      const start = c.receipt_date || (c.created_at || '').slice(0, 10);
+      if (!start) return null;
+      const end = closureMap[c.id] || today;
+      const days = Math.round((new Date(end) - new Date(start)) / 86400000);
+      return { id: c.id, customer: c.customer_name || '-', part: [c.part_number, c.part_name].filter(Boolean).join(' ') || '-', days: Math.max(0, days), closed: c.current_stage === '종결', start };
+    }).filter(Boolean);
+  }, [filteredClaims, closureMap]);
+
+  const ltHistogram = useMemo(() => [
+    { label: '~14일',   count: leadTimeItems.filter(l => l.days <= 14).length, color: '#10b981' },
+    { label: '15~30일', count: leadTimeItems.filter(l => l.days > 14 && l.days <= 30).length, color: '#3b82f6' },
+    { label: '31~60일', count: leadTimeItems.filter(l => l.days > 30 && l.days <= 60).length, color: '#f59e0b' },
+    { label: '61~90일', count: leadTimeItems.filter(l => l.days > 60 && l.days <= 90).length, color: '#f97316' },
+    { label: '90일+',   count: leadTimeItems.filter(l => l.days > 90).length, color: '#ef4444' },
+  ], [leadTimeItems]);
+
+  const customerAvgDays = useMemo(() => {
+    const map = {};
+    leadTimeItems.forEach(l => {
+      if (!map[l.customer]) map[l.customer] = [];
+      map[l.customer].push(l.days);
+    });
+    return Object.entries(map)
+      .map(([name, arr]) => ({ name: truncLabel(name), avg: Math.round(arr.reduce((s, v) => s + v, 0) / arr.length), count: arr.length }))
+      .sort((a, b) => b.avg - a.avg)
+      .slice(0, 10);
+  }, [leadTimeItems]);
+
+  /* ── 반복 클레임 패턴 ── */
+  const repeatAnalysis = useMemo(() => {
+    const comboCnt = {};
+    filteredClaims.forEach(c => {
+      if (!c.customer_name || (!c.part_number && !c.part_name)) return;
+      const part = [c.part_number, c.part_name].filter(Boolean).join(' ');
+      const key = `${c.customer_name}||${part}`;
+      if (!comboCnt[key]) comboCnt[key] = { customer: c.customer_name, part, count: 0 };
+      comboCnt[key].count++;
+    });
+    const comboRepeats = Object.values(comboCnt).filter(c => c.count >= 2).sort((a, b) => b.count - a.count);
+    return { comboRepeats, custRepeats: customerAnalysis.filter(c => c.total >= 2).slice(0, 10), partRepeats: partAnalysis.filter(p => p.total >= 2).slice(0, 10) };
+  }, [filteredClaims, customerAnalysis, partAnalysis]);
+
+  /* ── 리스크 매트릭스 ── */
+  const riskData = useMemo(() => customerAnalysis.map(c => ({ name: c.name, x: c.total, y: c.closeRate })), [customerAnalysis]);
+
   /* ── 요약 KPI ── */
   const total     = filteredClaims.length;
   const active    = filteredClaims.filter(c => c.current_stage !== '종결').length;
@@ -665,7 +724,7 @@ export default function Analytics() {
       )}
 
       {/* 탭 */}
-      <div style={{ display: 'flex', gap: 4, marginBottom: 16 }} className="no-print">
+      <div style={{ display: 'flex', gap: 4, marginBottom: 16, flexWrap: 'wrap' }} className="no-print">
         {TABS.map(t => (
           <button key={t} onClick={() => { setTab(t); setExpandedKey(null); }} style={{
             padding: '8px 18px', borderRadius: 8, border: '1px solid', fontSize: 13, fontWeight: 600,
@@ -1234,6 +1293,563 @@ export default function Analytics() {
             })()}
           </div>
         </div>
+      )}
+
+      {/* ── 연도별 비교 탭 ── */}
+      {tab === '연도별 비교' && (
+        <YearCompare claims={claims} stages={stages} causesByClaimId={causesByClaimId} />
+      )}
+
+      {/* ── 리드타임 탭 ── */}
+      {tab === '리드타임' && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+          {(() => {
+            const days = leadTimeItems.map(l => l.days);
+            const avg = days.length ? Math.round(days.reduce((s, v) => s + v, 0) / days.length) : 0;
+            const pending = leadTimeItems.filter(l => !l.closed);
+            return (
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 12 }}>
+                {[
+                  { label: '전체 평균 처리일', value: avg + '일', color: '#3b82f6' },
+                  { label: '최장 소요일', value: (days.length ? Math.max(...days) : 0) + '일', color: '#8b5cf6' },
+                  { label: '30일↑ 미처리', value: pending.filter(l => l.days >= 30).length + '건', color: '#f59e0b' },
+                  { label: '60일↑ 미처리', value: pending.filter(l => l.days >= 60).length + '건', color: '#f97316' },
+                  { label: '90일↑ 미처리', value: pending.filter(l => l.days >= 90).length + '건', color: '#ef4444' },
+                ].map(k => (
+                  <div key={k.label} className="card" style={{ textAlign: 'center' }}>
+                    <div style={{ fontSize: 11, color: '#64748b', marginBottom: 6 }}>{k.label}</div>
+                    <div style={{ fontSize: 24, fontWeight: 700, color: k.color }}>{k.value}</div>
+                  </div>
+                ))}
+              </div>
+            );
+          })()}
+
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
+            <div className="card">
+              <div className="card-title">📊 처리 소요일 분포</div>
+              {leadTimeItems.length === 0 ? <div className="empty">데이터 없음</div> : (
+                <ResponsiveContainer width="100%" height={220}>
+                  <BarChart data={ltHistogram} margin={{ top: 4, right: 16, bottom: 4, left: -8 }}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
+                    <XAxis dataKey="label" tick={{ fontSize: 12 }} />
+                    <YAxis tick={{ fontSize: 11 }} allowDecimals={false} />
+                    <Tooltip formatter={v => [v + '건', '클레임']} />
+                    <Bar dataKey="count" radius={[4, 4, 0, 0]}>
+                      {ltHistogram.map((d, i) => <Cell key={i} fill={d.color} />)}
+                    </Bar>
+                  </BarChart>
+                </ResponsiveContainer>
+              )}
+            </div>
+            <div className="card">
+              <div className="card-title">🏢 고객사별 평균 처리일 (상위 10)</div>
+              {customerAvgDays.length === 0 ? <div className="empty">데이터 없음</div> : (
+                <ResponsiveContainer width="100%" height={Math.max(customerAvgDays.length * 32 + 20, 220)}>
+                  <BarChart data={customerAvgDays} layout="vertical" margin={{ top: 4, right: 48, bottom: 4, left: 4 }}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
+                    <XAxis type="number" tick={{ fontSize: 11 }} unit="일" />
+                    <YAxis type="category" dataKey="name" tick={{ fontSize: 11 }} width={yAxisW(customerAvgDays)} />
+                    <Tooltip formatter={v => [v + '일', '평균 처리일']} />
+                    <Bar dataKey="avg" radius={[0, 4, 4, 0]}
+                      label={{ position: 'right', fontSize: 11, formatter: v => v + '일' }}>
+                      {customerAvgDays.map((d, i) => (
+                        <Cell key={i} fill={d.avg > 60 ? '#ef4444' : d.avg > 30 ? '#f59e0b' : '#10b981'} />
+                      ))}
+                    </Bar>
+                  </BarChart>
+                </ResponsiveContainer>
+              )}
+            </div>
+          </div>
+
+          <div className="card">
+            <div className="card-title">⚠️ 장기 미처리 클레임 (30일 이상)</div>
+            {(() => {
+              const longPending = leadTimeItems.filter(l => !l.closed && l.days >= 30).sort((a, b) => b.days - a.days);
+              if (longPending.length === 0) return <div className="empty" style={{ color: '#10b981' }}>30일 이상 미처리 클레임 없음 ✅</div>;
+              return (
+                <div className="table-wrap">
+                  <table style={{ fontSize: 12 }}>
+                    <thead>
+                      <tr><th>고객사</th><th>품목</th><th>접수일</th><th style={{ textAlign: 'center' }}>경과일</th><th style={{ textAlign: 'center' }}>구분</th></tr>
+                    </thead>
+                    <tbody>
+                      {longPending.slice(0, 30).map(l => (
+                        <tr key={l.id} className="clickable" onClick={() => navigate(`/claims/${l.id}`)}>
+                          <td><strong>{l.customer}</strong></td>
+                          <td style={{ color: '#64748b' }}>{l.part || '-'}</td>
+                          <td style={{ color: '#64748b' }}>{l.start}</td>
+                          <td style={{ textAlign: 'center' }}>
+                            <span style={{ fontWeight: 700, fontSize: 13, color: l.days >= 90 ? '#ef4444' : l.days >= 60 ? '#f97316' : '#f59e0b' }}>{l.days}일</span>
+                          </td>
+                          <td style={{ textAlign: 'center' }}>
+                            <span style={{ padding: '2px 8px', borderRadius: 99, fontSize: 11, fontWeight: 600, background: l.days >= 90 ? '#fee2e2' : l.days >= 60 ? '#fff7ed' : '#fef3c7', color: l.days >= 90 ? '#991b1b' : l.days >= 60 ? '#9a3412' : '#92400e' }}>
+                              {l.days >= 90 ? '90일+' : l.days >= 60 ? '60일+' : '30일+'}
+                            </span>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              );
+            })()}
+          </div>
+        </div>
+      )}
+
+      {/* ── 반복 클레임 탭 ── */}
+      {tab === '반복 클레임' && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12 }}>
+            {[
+              { label: '반복 고객사', value: repeatAnalysis.custRepeats.length, color: '#3b82f6', desc: '2건 이상 발생' },
+              { label: '반복 품목', value: repeatAnalysis.partRepeats.length, color: '#8b5cf6', desc: '동일 품번/품명' },
+              { label: '고객사+품목 재발', value: repeatAnalysis.comboRepeats.length, color: '#ef4444', desc: '동일 조합 재발' },
+            ].map(k => (
+              <div key={k.label} className="card" style={{ textAlign: 'center' }}>
+                <div style={{ fontSize: 11, color: '#64748b', marginBottom: 4 }}>{k.label}</div>
+                <div style={{ fontSize: 26, fontWeight: 700, color: k.color }}>{k.value}건</div>
+                <div style={{ fontSize: 11, color: '#94a3b8', marginTop: 4 }}>{k.desc}</div>
+              </div>
+            ))}
+          </div>
+
+          {repeatAnalysis.comboRepeats.length > 0 && (
+            <div className="card">
+              <div className="card-title">🔴 고객사 × 품목 재발 조합 <span style={{ fontSize: 11, color: '#94a3b8', fontWeight: 400 }}>· 동일 조합 2건 이상 — 재발방지 점검 필요</span></div>
+              <div className="table-wrap">
+                <table style={{ fontSize: 12 }}>
+                  <thead><tr><th>고객사</th><th>품목</th><th style={{ textAlign: 'center' }}>발생 횟수</th></tr></thead>
+                  <tbody>
+                    {repeatAnalysis.comboRepeats.map((c, i) => (
+                      <tr key={i}>
+                        <td><strong>{c.customer}</strong></td>
+                        <td style={{ color: '#64748b' }}>{c.part}</td>
+                        <td style={{ textAlign: 'center' }}>
+                          <span style={{ background: '#fee2e2', color: '#991b1b', padding: '2px 12px', borderRadius: 99, fontWeight: 700, fontSize: 13 }}>{c.count}회</span>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
+            <div className="card">
+              <div className="card-title">🏢 다발 고객사 (2건 이상)</div>
+              {repeatAnalysis.custRepeats.length === 0 ? <div className="empty">없음</div> : (
+                <ResponsiveContainer width="100%" height={Math.max(repeatAnalysis.custRepeats.length * 36 + 20, 160)}>
+                  <BarChart data={repeatAnalysis.custRepeats.map(c => ({ name: truncLabel(c.name), count: c.total, rate: c.closeRate }))} layout="vertical" margin={{ top: 4, right: 48, bottom: 4, left: 4 }}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
+                    <XAxis type="number" tick={{ fontSize: 11 }} allowDecimals={false} />
+                    <YAxis type="category" dataKey="name" tick={{ fontSize: 11 }} width={yAxisW(repeatAnalysis.custRepeats.map(c => ({ name: truncLabel(c.name) })))} />
+                    <Tooltip formatter={(v, k) => [k === 'count' ? v + '건' : v + '%', k === 'count' ? '클레임' : '종결률']} />
+                    <Bar dataKey="count" fill="#3b82f6" radius={[0, 4, 4, 0]} label={{ position: 'right', fontSize: 11, formatter: v => v + '건' }} />
+                  </BarChart>
+                </ResponsiveContainer>
+              )}
+            </div>
+            <div className="card">
+              <div className="card-title">🔩 다발 품목 (2건 이상)</div>
+              {repeatAnalysis.partRepeats.length === 0 ? <div className="empty">없음</div> : (
+                <ResponsiveContainer width="100%" height={Math.max(repeatAnalysis.partRepeats.length * 36 + 20, 160)}>
+                  <BarChart data={repeatAnalysis.partRepeats.map(p => ({ name: truncLabel(p.part_name || p.part_number), count: p.total }))} layout="vertical" margin={{ top: 4, right: 48, bottom: 4, left: 4 }}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
+                    <XAxis type="number" tick={{ fontSize: 11 }} allowDecimals={false} />
+                    <YAxis type="category" dataKey="name" tick={{ fontSize: 11 }} width={yAxisW(repeatAnalysis.partRepeats.map(p => ({ name: truncLabel(p.part_name || p.part_number) })))} />
+                    <Tooltip formatter={v => [v + '건', '클레임']} />
+                    <Bar dataKey="count" fill="#8b5cf6" radius={[0, 4, 4, 0]} label={{ position: 'right', fontSize: 11, formatter: v => v + '건' }} />
+                  </BarChart>
+                </ResponsiveContainer>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── 리스크 매트릭스 탭 ── */}
+      {tab === '리스크' && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+          <div className="card">
+            <div className="card-title">📍 고객사 리스크 매트릭스 <span style={{ fontSize: 11, color: '#94a3b8', fontWeight: 400 }}>· X=클레임 빈도, Y=종결률</span></div>
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 12 }}>
+              {[
+                { label: '⚠️ 고위험', desc: '빈도↑·종결률↓', bg: '#fee2e2', text: '#991b1b' },
+                { label: '🔶 주의', desc: '빈도↑·종결률↑', bg: '#fef3c7', text: '#92400e' },
+                { label: '🔵 관찰', desc: '빈도↓·종결률↓', bg: '#eff6ff', text: '#1d4ed8' },
+                { label: '✅ 양호', desc: '빈도↓·종결률↑', bg: '#f0fdf4', text: '#065f46' },
+              ].map(q => (
+                <span key={q.label} style={{ padding: '3px 10px', borderRadius: 6, fontSize: 12, fontWeight: 600, background: q.bg, color: q.text }}>{q.label} <span style={{ fontWeight: 400 }}>{q.desc}</span></span>
+              ))}
+            </div>
+            {riskData.length === 0 ? <div className="empty">데이터 없음</div> : (() => {
+              const avgX = Math.round(riskData.reduce((s, d) => s + d.x, 0) / riskData.length);
+              return (
+                <ResponsiveContainer width="100%" height={380}>
+                  <ScatterChart margin={{ top: 20, right: 30, bottom: 40, left: 10 }}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
+                    <XAxis type="number" dataKey="x" name="클레임 건수" label={{ value: '클레임 건수 →', position: 'insideBottom', offset: -20, fontSize: 11, fill: '#94a3b8' }} tick={{ fontSize: 11 }} allowDecimals={false} />
+                    <YAxis type="number" dataKey="y" name="종결률" domain={[0, 100]} label={{ value: '종결률(%)', angle: -90, position: 'insideLeft', offset: 10, fontSize: 11, fill: '#94a3b8' }} tick={{ fontSize: 11 }} unit="%" />
+                    <ZAxis range={[80, 80]} />
+                    <Tooltip content={({ payload }) => {
+                      if (!payload?.length) return null;
+                      const d = payload[0].payload;
+                      const isHigh = d.x > avgX && d.y < 50;
+                      const isWarn = d.x > avgX && d.y >= 50;
+                      const riskLabel = isHigh ? '⚠️ 고위험' : isWarn ? '🔶 주의' : d.y >= 70 ? '✅ 양호' : '🔵 관찰';
+                      return (
+                        <div style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: 8, padding: '8px 12px', fontSize: 12, boxShadow: '0 2px 8px #0001' }}>
+                          <div style={{ fontWeight: 700, marginBottom: 4 }}>{d.name}</div>
+                          <div>클레임 {d.x}건</div>
+                          <div>종결률 {d.y}%</div>
+                          <div style={{ marginTop: 4, fontWeight: 600, color: isHigh ? '#ef4444' : '#64748b' }}>{riskLabel}</div>
+                        </div>
+                      );
+                    }} />
+                    <ReferenceLine y={50} stroke="#e2e8f0" strokeDasharray="4 4" label={{ value: '50%', fill: '#94a3b8', fontSize: 10, position: 'insideTopRight' }} />
+                    <ReferenceLine x={avgX} stroke="#e2e8f0" strokeDasharray="4 4" label={{ value: `평균 ${avgX}건`, fill: '#94a3b8', fontSize: 10, position: 'insideTopRight' }} />
+                    <Scatter data={riskData} name="고객사">
+                      {riskData.map((d, i) => (
+                        <Cell key={i} fill={d.x > avgX && d.y < 50 ? '#ef4444' : d.x > avgX ? '#f59e0b' : d.y >= 70 ? '#10b981' : '#3b82f6'} />
+                      ))}
+                    </Scatter>
+                  </ScatterChart>
+                </ResponsiveContainer>
+              );
+            })()}
+          </div>
+
+          <div className="card">
+            <div className="card-title">📋 고객사 리스크 순위</div>
+            {riskData.length === 0 ? <div className="empty">데이터 없음</div> : (() => {
+              const avgX = Math.round(riskData.reduce((s, d) => s + d.x, 0) / riskData.length);
+              const withRisk = riskData.map(d => {
+                const level = d.x > avgX && d.y < 50 ? 4 : d.x > avgX && d.y < 70 ? 3 : d.x <= avgX && d.y < 50 ? 2 : 1;
+                const label = level === 4 ? '고위험' : level === 3 ? '주의' : level === 2 ? '관찰' : '양호';
+                return { ...d, level, label };
+              }).sort((a, b) => b.level - a.level || b.x - a.x);
+              const style = { '고위험': ['#fee2e2','#991b1b'], '주의': ['#fef3c7','#92400e'], '관찰': ['#eff6ff','#1d4ed8'], '양호': ['#f0fdf4','#065f46'] };
+              return (
+                <div className="table-wrap">
+                  <table style={{ fontSize: 12 }}>
+                    <thead><tr><th>고객사</th><th style={{ textAlign: 'center' }}>클레임 건수</th><th style={{ textAlign: 'center' }}>종결률</th><th style={{ textAlign: 'center' }}>리스크 등급</th></tr></thead>
+                    <tbody>
+                      {withRisk.map(d => {
+                        const [bg, text] = style[d.label];
+                        return (
+                          <tr key={d.name}>
+                            <td><strong>{d.name}</strong></td>
+                            <td style={{ textAlign: 'center', fontWeight: 700 }}>{d.x}건</td>
+                            <td style={{ textAlign: 'center' }}>
+                              <span style={{ fontWeight: 700, color: d.y >= 70 ? '#10b981' : d.y >= 50 ? '#f59e0b' : '#ef4444' }}>{d.y}%</span>
+                            </td>
+                            <td style={{ textAlign: 'center' }}>
+                              <span style={{ padding: '3px 14px', borderRadius: 99, fontSize: 11, fontWeight: 700, background: bg, color: text }}>{d.label}</span>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              );
+            })()}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ════════════════════════════════════════════════════════════
+   연도별 비교 컴포넌트
+═══════════════════════════════════════════════════════════════ */
+function YearCompare({ claims, stages, causesByClaimId }) {
+  const [range, setRange] = useState(3); // 3 | 5 | 0(전체)
+
+  /* ── 데이터가 있는 연도 목록 ── */
+  const allYears = useMemo(() => {
+    const s = new Set(claims.map(c => (c.receipt_date || c.created_at || '').slice(0, 4)).filter(y => y && y >= '2020'));
+    return [...s].sort();
+  }, [claims]);
+
+  const displayYears = useMemo(() => {
+    if (!range) return allYears;
+    return allYears.slice(-range);
+  }, [allYears, range]);
+
+  /* ── 연도별 통계 계산 ── */
+  const yearStats = useMemo(() => {
+    return displayYears.map(year => {
+      const yClaims = claims.filter(c => (c.receipt_date || c.created_at || '').startsWith(year));
+      const total   = yClaims.length;
+      const closed  = yClaims.filter(c => c.current_stage === '종결').length;
+      const closeRate = total ? Math.round(closed / total * 100) : 0;
+
+      // 고객사 TOP
+      const custMap = {};
+      yClaims.forEach(c => { const k = c.customer_name || '(미분류)'; custMap[k] = (custMap[k] || 0) + 1; });
+      const topCustomer = Object.entries(custMap).sort(([,a],[,b])=>b-a)[0];
+
+      // 품목군 TOP
+      const catMap = {};
+      yClaims.forEach(c => { const k = c.product_category || '(미분류)'; catMap[k] = (catMap[k] || 0) + 1; });
+      const topCategory = Object.entries(catMap).sort(([,a],[,b])=>b-a)[0];
+
+      // 원인 TOP
+      const causeMap = {};
+      yClaims.forEach(c => {
+        (causesByClaimId[c.id] || []).forEach(ca => { causeMap[ca] = (causeMap[ca] || 0) + 1; });
+      });
+      const topCause = Object.entries(causeMap).sort(([,a],[,b])=>b-a)[0];
+
+      // 월별 분포
+      const monthly = Array.from({ length: 12 }, (_, i) => {
+        const m = String(i + 1).padStart(2, '0');
+        return { month: `${i+1}월`, count: yClaims.filter(c => (c.receipt_date || c.created_at || '').slice(5, 7) === m).length };
+      });
+
+      // 그룹별
+      const domestic = yClaims.filter(c => c.customer_group !== '해외고객사').length;
+      const overseas = yClaims.filter(c => c.customer_group === '해외고객사').length;
+
+      return { year, total, closed, closeRate, topCustomer, topCategory, topCause, monthly, domestic, overseas };
+    });
+  }, [displayYears, claims, causesByClaimId]);
+
+  /* ── 전년도 대비 델타 ── */
+  function delta(curr, prev, key) {
+    if (!prev) return null;
+    return curr[key] - prev[key];
+  }
+
+  const DeltaBadge = ({ d, unit = '건', inverse = false }) => {
+    if (d === null || d === undefined) return <span style={{ color: '#94a3b8', fontSize: 11 }}>—</span>;
+    const isGood = inverse ? d < 0 : d > 0;
+    const isBad  = inverse ? d > 0 : d < 0;
+    const color  = d === 0 ? '#94a3b8' : isGood ? '#10b981' : '#ef4444';
+    return (
+      <span style={{ fontSize: 11, color, fontWeight: 600 }}>
+        {d > 0 ? '▲' : d < 0 ? '▼' : '—'} {Math.abs(d)}{unit}
+      </span>
+    );
+  };
+
+  const BAR_COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#8b5cf6', '#06b6d4'];
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+
+      {/* 범위 선택 */}
+      <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+        <span style={{ fontSize: 12, color: '#64748b', fontWeight: 600 }}>비교 범위</span>
+        {[[3,'최근 3년'],[5,'최근 5년'],[0,'전체']].map(([v, label]) => (
+          <button key={v} onClick={() => setRange(v)} style={{
+            padding: '5px 14px', borderRadius: 6, fontSize: 12, fontWeight: 600,
+            cursor: 'pointer', border: '1.5px solid', fontFamily: 'inherit',
+            background: range === v ? '#0f172a' : '#fff',
+            color: range === v ? '#fff' : '#64748b',
+            borderColor: range === v ? '#0f172a' : '#e2e8f0',
+          }}>{label}</button>
+        ))}
+        <span style={{ fontSize: 12, color: '#94a3b8', marginLeft: 8 }}>
+          {displayYears[0]} ~ {displayYears[displayYears.length - 1]}년 ({displayYears.length}개년)
+        </span>
+      </div>
+
+      {yearStats.length === 0 && (
+        <div className="empty"><div className="empty-icon">📊</div>데이터가 없습니다</div>
+      )}
+
+      {yearStats.length > 0 && (
+        <>
+          {/* 연도별 클레임 건수 바 차트 */}
+          <div className="card">
+            <div className="card-title">📊 연도별 클레임 접수 건수</div>
+            <ResponsiveContainer width="100%" height={220}>
+              <BarChart data={yearStats} margin={{ top: 4, right: 20, left: -8, bottom: 0 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
+                <XAxis dataKey="year" tickFormatter={y => y + '년'} tick={{ fontSize: 12 }} />
+                <YAxis tick={{ fontSize: 11 }} allowDecimals={false} />
+                <Tooltip formatter={(v, name) => [v + '건', name]} labelFormatter={l => l + '년'} />
+                <Bar dataKey="total" name="총 클레임" radius={[6,6,0,0]} maxBarSize={60}
+                  label={{ position: 'top', fontSize: 12, fontWeight: 700, formatter: v => v + '건' }}>
+                  {yearStats.map((d, i) => <Cell key={i} fill={BAR_COLORS[i % BAR_COLORS.length]} />)}
+                </Bar>
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+
+          {/* 종결률 + 내수/해외 구성 */}
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+            <div className="card">
+              <div className="card-title">✅ 연도별 종결률</div>
+              <ResponsiveContainer width="100%" height={200}>
+                <BarChart data={yearStats} margin={{ top: 4, right: 20, left: -8, bottom: 0 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
+                  <XAxis dataKey="year" tickFormatter={y => y + '년'} tick={{ fontSize: 12 }} />
+                  <YAxis domain={[0, 100]} tickFormatter={v => v + '%'} tick={{ fontSize: 11 }} />
+                  <Tooltip formatter={(v) => [v + '%', '종결률']} labelFormatter={l => l + '년'} />
+                  <Bar dataKey="closeRate" name="종결률" radius={[6,6,0,0]} maxBarSize={60}
+                    label={{ position: 'top', fontSize: 12, fontWeight: 700, formatter: v => v + '%' }}>
+                    {yearStats.map((d, i) => (
+                      <Cell key={i} fill={d.closeRate >= 70 ? '#10b981' : d.closeRate >= 50 ? '#f59e0b' : '#ef4444'} />
+                    ))}
+                  </Bar>
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+
+            <div className="card">
+              <div className="card-title">🌍 내수 / 해외 구성</div>
+              <ResponsiveContainer width="100%" height={200}>
+                <BarChart data={yearStats} margin={{ top: 4, right: 20, left: -8, bottom: 0 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
+                  <XAxis dataKey="year" tickFormatter={y => y + '년'} tick={{ fontSize: 12 }} />
+                  <YAxis tick={{ fontSize: 11 }} allowDecimals={false} />
+                  <Tooltip formatter={(v, name) => [v + '건', name]} labelFormatter={l => l + '년'} />
+                  <Bar dataKey="domestic" name="내수" stackId="a" fill="#3b82f6" />
+                  <Bar dataKey="overseas" name="해외" stackId="a" fill="#06b6d4" radius={[4,4,0,0]} />
+                  <Legend iconType="square" iconSize={10} wrapperStyle={{ fontSize: 12 }} />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          </div>
+
+          {/* 연도별 상세 비교 테이블 */}
+          <div className="card">
+            <div className="card-title">📋 연도별 핵심 지표 비교</div>
+            <div style={{ overflowX: 'auto' }}>
+              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+                <thead>
+                  <tr style={{ borderBottom: '2px solid #e2e8f0' }}>
+                    <th style={{ padding: '10px 12px', textAlign: 'left', color: '#64748b', fontWeight: 600, fontSize: 12, whiteSpace: 'nowrap' }}>지표</th>
+                    {yearStats.map(y => (
+                      <th key={y.year} style={{ padding: '10px 16px', textAlign: 'center', color: '#1e293b', fontWeight: 700, whiteSpace: 'nowrap' }}>
+                        {y.year}년
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {[
+                    {
+                      label: '총 클레임',
+                      render: (y, prev) => (
+                        <div>
+                          <span style={{ fontWeight: 700, fontSize: 15 }}>{y.total}건</span>
+                          <div style={{ marginTop: 2 }}><DeltaBadge d={delta(y, prev, 'total')} inverse /></div>
+                        </div>
+                      ),
+                    },
+                    {
+                      label: '종결 건수',
+                      render: (y, prev) => (
+                        <div>
+                          <span style={{ fontWeight: 700 }}>{y.closed}건</span>
+                          <div style={{ marginTop: 2 }}><DeltaBadge d={delta(y, prev, 'closed')} /></div>
+                        </div>
+                      ),
+                    },
+                    {
+                      label: '종결률',
+                      render: (y, prev) => (
+                        <div>
+                          <span style={{ fontWeight: 700, color: y.closeRate >= 70 ? '#10b981' : y.closeRate >= 50 ? '#f59e0b' : '#ef4444' }}>
+                            {y.closeRate}%
+                          </span>
+                          <div style={{ marginTop: 2 }}><DeltaBadge d={delta(y, prev, 'closeRate')} unit="%" /></div>
+                        </div>
+                      ),
+                    },
+                    {
+                      label: '내수 / 해외',
+                      render: (y) => (
+                        <span style={{ color: '#475569' }}>{y.domestic} / {y.overseas}</span>
+                      ),
+                    },
+                    {
+                      label: '주요 고객사',
+                      render: (y) => y.topCustomer
+                        ? <span style={{ fontWeight: 600, color: '#1d4ed8' }}>{y.topCustomer[0]} <span style={{ fontWeight: 400, color: '#94a3b8' }}>({y.topCustomer[1]}건)</span></span>
+                        : <span style={{ color: '#94a3b8' }}>—</span>,
+                    },
+                    {
+                      label: '주요 품목군',
+                      render: (y) => y.topCategory
+                        ? <span>{y.topCategory[0]} <span style={{ color: '#94a3b8' }}>({y.topCategory[1]}건)</span></span>
+                        : <span style={{ color: '#94a3b8' }}>—</span>,
+                    },
+                    {
+                      label: '주요 원인',
+                      render: (y) => y.topCause
+                        ? <span style={{ color: '#7c3aed' }}>{y.topCause[0]} <span style={{ color: '#94a3b8' }}>({y.topCause[1]}건)</span></span>
+                        : <span style={{ color: '#94a3b8' }}>분석 없음</span>,
+                    },
+                  ].map(({ label, render }, ri) => (
+                    <tr key={label} style={{ borderBottom: '1px solid #f1f5f9', background: ri % 2 === 0 ? '#fff' : '#fafafa' }}>
+                      <td style={{ padding: '10px 12px', color: '#64748b', fontWeight: 600, fontSize: 12, whiteSpace: 'nowrap' }}>{label}</td>
+                      {yearStats.map((y, i) => (
+                        <td key={y.year} style={{ padding: '10px 16px', textAlign: 'center', verticalAlign: 'middle' }}>
+                          {render(y, yearStats[i - 1])}
+                        </td>
+                      ))}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          {/* 전년도 대비 YoY 인사이트 */}
+          {yearStats.length >= 2 && (() => {
+            const curr = yearStats[yearStats.length - 1];
+            const prev = yearStats[yearStats.length - 2];
+            const totalDelta = curr.total - prev.total;
+            const rateDelta  = curr.closeRate - prev.closeRate;
+            return (
+              <div className="card" style={{ background: '#f8fafc', border: '1px solid #e2e8f0' }}>
+                <div className="card-title">💡 전년도 대비 요약 ({prev.year} → {curr.year})</div>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12 }}>
+                  {[
+                    {
+                      label: '클레임 건수',
+                      text: totalDelta === 0
+                        ? `${curr.year}년 클레임 건수 전년 동일 (${curr.total}건)`
+                        : totalDelta > 0
+                          ? `클레임 ${totalDelta}건 증가 — ${prev.total}건 → ${curr.total}건`
+                          : `클레임 ${Math.abs(totalDelta)}건 감소 — ${prev.total}건 → ${curr.total}건`,
+                      good: totalDelta <= 0,
+                    },
+                    {
+                      label: '종결률',
+                      text: rateDelta === 0
+                        ? `종결률 전년 동일 (${curr.closeRate}%)`
+                        : rateDelta > 0
+                          ? `종결률 ${rateDelta}%p 개선 — ${prev.closeRate}% → ${curr.closeRate}%`
+                          : `종결률 ${Math.abs(rateDelta)}%p 하락 — ${prev.closeRate}% → ${curr.closeRate}%`,
+                      good: rateDelta >= 0,
+                    },
+                  ].map(({ label, text, good }) => (
+                    <div key={label} style={{
+                      flex: '1 1 260px', padding: '12px 16px', borderRadius: 8,
+                      background: good ? '#f0fdf4' : '#fef2f2',
+                      border: `1px solid ${good ? '#bbf7d0' : '#fecaca'}`,
+                      borderLeft: `4px solid ${good ? '#10b981' : '#ef4444'}`,
+                    }}>
+                      <div style={{ fontSize: 11, fontWeight: 700, color: good ? '#065f46' : '#991b1b', marginBottom: 4 }}>{label}</div>
+                      <div style={{ fontSize: 13, color: '#374151' }}>{text}</div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            );
+          })()}
+        </>
       )}
     </div>
   );

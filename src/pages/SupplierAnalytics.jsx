@@ -2,7 +2,7 @@ import { useMemo, useState, useEffect, Fragment } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
-  PieChart, Pie, Cell, Legend,
+  PieChart, Pie, Cell, Legend, LineChart, Line,
 } from 'recharts';
 import { useSupplierClaims } from '../context/SupplierClaimsContext';
 import { usePrintTitle } from '../context/PrintContext';
@@ -10,7 +10,7 @@ import { DISPOSITION_COLORS, PRODUCT_CATEGORIES } from '../lib/supabase';
 import { exportToExcel } from '../lib/exportExcel';
 
 const COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#8b5cf6', '#f97316', '#ef4444', '#06b6d4', '#84cc16', '#ec4899', '#64748b'];
-const TABS   = ['공급사별', '품목별', '불량유형별', '품목군별', '처리결과별', '월별 추이'];
+const TABS   = ['공급사별', '품목별', '불량유형별', '품목군별', '처리결과별', '월별 추이', '공급사 등급', '불량률 추이', '품목 집중도'];
 
 const truncLabel = (str, max = 16) => !str ? '' : str.length > max ? str.slice(0, max) + '…' : str;
 const yAxisW = (data, key = 'name', max = 16) => {
@@ -215,6 +215,64 @@ export default function SupplierAnalytics() {
     });
     return Object.entries(map).sort(([a],[b]) => a.localeCompare(b)).slice(-24)
       .map(([month, count]) => ({ month, count }));
+  }, [filteredClaims]);
+
+  /* ── 공급사 등급 (A~D) ── */
+  const gradeAnalysis = useMemo(() => {
+    return supplierAnalysis.map(s => {
+      const rate = parseFloat(s.avgRate) || 0;
+      const processedCnt = s.claims.filter(c => c.improvement_status && c.improvement_status !== '미조치').length;
+      const processedRate = s.claims.length ? Math.round(processedCnt / s.claims.length * 100) : 0;
+      let grade, gradeColor;
+      if (rate < 1 && processedRate >= 80)      { grade = 'A'; gradeColor = '#10b981'; }
+      else if (rate < 3 && processedRate >= 60) { grade = 'B'; gradeColor = '#3b82f6'; }
+      else if (rate < 5 && processedRate >= 40) { grade = 'C'; gradeColor = '#f59e0b'; }
+      else                                      { grade = 'D'; gradeColor = '#ef4444'; }
+      return { ...s, grade, gradeColor, processedRate, defRateNum: rate };
+    }).sort((a, b) => a.grade.localeCompare(b.grade) || a.defRateNum - b.defRateNum);
+  }, [supplierAnalysis]);
+
+  /* ── 공급사별 월별 불량 발생 추이 (상위 5) ── */
+  const defectTrendData = useMemo(() => {
+    const top5 = supplierAnalysis.slice(0, 5).map(s => s.name);
+    const monthSet = new Set();
+    claims.forEach(c => {
+      const m = (c.incoming_date || c.created_at || '').slice(0, 7);
+      if (m.length === 7) monthSet.add(m);
+    });
+    const months = [...monthSet].sort().slice(-12);
+    const rows = months.map(m => {
+      const row = { month: m };
+      top5.forEach(name => {
+        row[name] = claims.filter(c => c.supplier_name === name && (c.incoming_date || c.created_at || '').startsWith(m)).length;
+      });
+      return row;
+    });
+    return { months, top5, rows };
+  }, [claims, supplierAnalysis]);
+
+  /* ── 품목별 불량 집중도 (불량수량 기준) ── */
+  const partConcentration = useMemo(() => {
+    const map = {};
+    filteredClaims.forEach(c => {
+      if (!c.part_number && !c.part_name) return;
+      const key = [c.part_number, c.part_name].filter(Boolean).join(' · ');
+      if (!map[key]) map[key] = { name: key, count: 0, defectQty: 0, suppliers: new Set() };
+      map[key].count++;
+      map[key].defectQty += c.defect_quantity || 0;
+      if (c.supplier_name) map[key].suppliers.add(c.supplier_name);
+    });
+    const items = Object.values(map)
+      .map(m => ({ ...m, suppliers: [...m.suppliers], supplierCount: m.suppliers.size }))
+      .sort((a, b) => b.defectQty - a.defectQty || b.count - a.count)
+      .slice(0, 15);
+    const totalDefQty = items.reduce((s, v) => s + v.defectQty, 0);
+    let cum = 0;
+    return items.map(item => {
+      const pct = totalDefQty ? parseFloat((item.defectQty / totalDefQty * 100).toFixed(1)) : 0;
+      cum += pct;
+      return { ...item, pct, cumPct: parseFloat(cum.toFixed(1)) };
+    });
   }, [filteredClaims]);
 
   if (loading) return <div className="loading">⏳ 불러오는 중...</div>;
@@ -803,6 +861,250 @@ export default function SupplierAnalytics() {
               </div>
             </div>
           )}
+        </div>
+      )}
+
+      {/* ── 공급사 등급 탭 ── */}
+      {tab === '공급사 등급' && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+          {/* 등급 기준 설명 */}
+          <div className="card" style={{ background: '#f8fafc' }}>
+            <div className="card-title">📐 등급 산정 기준</div>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 10 }}>
+              {[
+                { grade: 'A', color: '#10b981', bg: '#f0fdf4', desc: '불량률 < 1% + 시정조치율 ≥ 80%' },
+                { grade: 'B', color: '#3b82f6', bg: '#eff6ff', desc: '불량률 < 3% + 시정조치율 ≥ 60%' },
+                { grade: 'C', color: '#f59e0b', bg: '#fffbeb', desc: '불량률 < 5% + 시정조치율 ≥ 40%' },
+                { grade: 'D', color: '#ef4444', bg: '#fef2f2', desc: '위 기준 미달 — 집중 관리 필요' },
+              ].map(g => (
+                <div key={g.grade} style={{ background: g.bg, borderRadius: 10, padding: '12px 16px', borderLeft: `4px solid ${g.color}` }}>
+                  <div style={{ fontSize: 22, fontWeight: 900, color: g.color, marginBottom: 4 }}>등급 {g.grade}</div>
+                  <div style={{ fontSize: 12, color: '#374151' }}>{g.desc}</div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* 등급 분포 요약 */}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12 }}>
+            {['A','B','C','D'].map((g, gi) => {
+              const cnt = gradeAnalysis.filter(s => s.grade === g).length;
+              const colors = ['#10b981','#3b82f6','#f59e0b','#ef4444'];
+              return (
+                <div key={g} className="card" style={{ textAlign: 'center' }}>
+                  <div style={{ fontSize: 11, color: '#64748b', marginBottom: 4 }}>등급 {g}</div>
+                  <div style={{ fontSize: 28, fontWeight: 900, color: colors[gi] }}>{cnt}개사</div>
+                </div>
+              );
+            })}
+          </div>
+
+          {/* 등급 테이블 */}
+          <div className="card">
+            <div className="card-title">🏭 공급사별 등급 현황 <span style={{ fontSize: 11, color: '#94a3b8', fontWeight: 400 }}>· 등급순 정렬</span></div>
+            {gradeAnalysis.length === 0 ? <div className="empty">데이터 없음</div> : (
+              <div className="table-wrap">
+                <table style={{ fontSize: 12 }}>
+                  <thead>
+                    <tr><th>공급사</th><th style={{ textAlign: 'center' }}>등급</th><th style={{ textAlign: 'center' }}>총 건수</th><th style={{ textAlign: 'center' }}>평균 불량률</th><th style={{ textAlign: 'center' }}>시정조치율</th><th style={{ textAlign: 'center' }}>미결</th></tr>
+                  </thead>
+                  <tbody>
+                    {gradeAnalysis.map(s => (
+                      <tr key={s.name}>
+                        <td><strong>🏭 {s.name}</strong></td>
+                        <td style={{ textAlign: 'center' }}>
+                          <span style={{ fontWeight: 900, fontSize: 15, color: s.gradeColor }}>★ {s.grade}</span>
+                        </td>
+                        <td style={{ textAlign: 'center', fontWeight: 700 }}>{s.total}</td>
+                        <td style={{ textAlign: 'center' }}>
+                          {s.avgRate != null
+                            ? <span style={{ fontWeight: 700, color: rateColor(s.avgRate) }}>{s.avgRate}%</span>
+                            : <span style={{ color: '#94a3b8' }}>-</span>}
+                        </td>
+                        <td style={{ textAlign: 'center' }}>
+                          <span style={{ fontWeight: 700, color: s.processedRate >= 70 ? '#10b981' : s.processedRate >= 40 ? '#f59e0b' : '#ef4444' }}>{s.processedRate}%</span>
+                        </td>
+                        <td style={{ textAlign: 'center' }}>
+                          {s.pending > 0
+                            ? <span style={{ background: '#fef3c7', color: '#92400e', padding: '2px 8px', borderRadius: 99, fontSize: 11, fontWeight: 700 }}>{s.pending}</span>
+                            : <span style={{ color: '#10b981' }}>✓</span>}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* ── 불량률 추이 탭 ── */}
+      {tab === '불량률 추이' && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+          <div className="card">
+            <div className="card-title">📈 공급사별 월별 불량 발생 추이 <span style={{ fontSize: 11, color: '#94a3b8', fontWeight: 400 }}>· 상위 5개사, 최근 12개월</span></div>
+            {defectTrendData.rows.length === 0 || defectTrendData.top5.length === 0 ? (
+              <div className="empty">데이터 없음</div>
+            ) : (
+              <>
+                <ResponsiveContainer width="100%" height={300}>
+                  <LineChart data={defectTrendData.rows} margin={{ top: 4, right: 20, bottom: 4, left: -8 }}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
+                    <XAxis dataKey="month" tick={{ fontSize: 10 }} />
+                    <YAxis tick={{ fontSize: 11 }} allowDecimals={false} />
+                    <Tooltip formatter={(v, name) => [v + '건', name]} />
+                    <Legend iconType="circle" iconSize={10} wrapperStyle={{ fontSize: 12 }} />
+                    {defectTrendData.top5.map((name, i) => (
+                      <Line key={name} type="monotone" dataKey={name} stroke={COLORS[i]} strokeWidth={2} dot={{ r: 3 }} activeDot={{ r: 5 }} connectNulls />
+                    ))}
+                  </LineChart>
+                </ResponsiveContainer>
+                <div style={{ marginTop: 12 }}>
+                  <div style={{ fontSize: 11, color: '#64748b', marginBottom: 8, fontWeight: 600 }}>최근 월 현황</div>
+                  <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                    {defectTrendData.top5.map((name, i) => {
+                      const lastRow = defectTrendData.rows[defectTrendData.rows.length - 1];
+                      const prevRow = defectTrendData.rows[defectTrendData.rows.length - 2];
+                      const curr = lastRow?.[name] ?? 0;
+                      const prev = prevRow?.[name] ?? 0;
+                      const delta = curr - prev;
+                      return (
+                        <div key={name} style={{ background: '#f8fafc', borderRadius: 8, padding: '10px 14px', border: `1px solid ${COLORS[i]}40`, borderLeft: `3px solid ${COLORS[i]}` }}>
+                          <div style={{ fontSize: 11, color: '#64748b', marginBottom: 4 }}>{name}</div>
+                          <div style={{ fontSize: 18, fontWeight: 700, color: COLORS[i] }}>{curr}건</div>
+                          {delta !== 0 && <div style={{ fontSize: 11, color: delta > 0 ? '#ef4444' : '#10b981', fontWeight: 600 }}>{delta > 0 ? '▲' : '▼'} {Math.abs(delta)}건 전월비</div>}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              </>
+            )}
+          </div>
+
+          {/* 월별 공급사 분포 */}
+          <div className="card">
+            <div className="card-title">📊 상위 5개사 월별 건수 비교</div>
+            {defectTrendData.rows.length === 0 ? <div className="empty">데이터 없음</div> : (
+              <ResponsiveContainer width="100%" height={260}>
+                <BarChart data={defectTrendData.rows} margin={{ top: 4, right: 20, bottom: 4, left: -8 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
+                  <XAxis dataKey="month" tick={{ fontSize: 10 }} />
+                  <YAxis tick={{ fontSize: 11 }} allowDecimals={false} />
+                  <Tooltip />
+                  <Legend iconType="square" iconSize={10} wrapperStyle={{ fontSize: 12 }} />
+                  {defectTrendData.top5.map((name, i) => (
+                    <Bar key={name} dataKey={name} stackId="a" fill={COLORS[i]} />
+                  ))}
+                </BarChart>
+              </ResponsiveContainer>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* ── 품목 집중도 탭 ── */}
+      {tab === '품목 집중도' && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+          {/* 상위 집중도 요약 */}
+          {partConcentration.length > 0 && (() => {
+            const total = partConcentration.reduce((s, v) => s + v.defectQty, 0);
+            const top3 = partConcentration.slice(0, 3);
+            const top3pct = top3.reduce((s, v) => s + v.pct, 0).toFixed(0);
+            return (
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12 }}>
+                <div className="card" style={{ textAlign: 'center' }}>
+                  <div style={{ fontSize: 11, color: '#64748b', marginBottom: 4 }}>총 불량 수량</div>
+                  <div style={{ fontSize: 24, fontWeight: 700, color: '#0f172a' }}>{total.toLocaleString()}EA</div>
+                </div>
+                <div className="card" style={{ textAlign: 'center' }}>
+                  <div style={{ fontSize: 11, color: '#64748b', marginBottom: 4 }}>집중 품목 수</div>
+                  <div style={{ fontSize: 24, fontWeight: 700, color: '#8b5cf6' }}>{partConcentration.length}개</div>
+                </div>
+                <div className="card" style={{ textAlign: 'center' }}>
+                  <div style={{ fontSize: 11, color: '#64748b', marginBottom: 4 }}>상위 3 품목 집중도</div>
+                  <div style={{ fontSize: 24, fontWeight: 700, color: top3pct >= 70 ? '#ef4444' : '#f59e0b' }}>{top3pct}%</div>
+                  <div style={{ fontSize: 11, color: '#94a3b8', marginTop: 2 }}>파레토 집중 구간</div>
+                </div>
+                <div className="card" style={{ textAlign: 'center' }}>
+                  <div style={{ fontSize: 11, color: '#64748b', marginBottom: 4 }}>최다 불량 품목</div>
+                  <div style={{ fontSize: 13, fontWeight: 700, color: '#ef4444', wordBreak: 'break-all' }}>{truncLabel(partConcentration[0]?.name || '-', 18)}</div>
+                  <div style={{ fontSize: 11, color: '#94a3b8', marginTop: 2 }}>{partConcentration[0]?.defectQty || 0}EA</div>
+                </div>
+              </div>
+            );
+          })()}
+
+          {/* 불량수량 집중도 바 차트 */}
+          <div className="card">
+            <div className="card-title">📊 품목별 불량 수량 집중도 (상위 15품목) <span style={{ fontSize: 11, color: '#94a3b8', fontWeight: 400 }}>· 수량 기준 정렬</span></div>
+            {partConcentration.length === 0 ? <div className="empty">데이터 없음</div> : (
+              <ResponsiveContainer width="100%" height={Math.max(partConcentration.length * 36 + 20, 200)}>
+                <BarChart data={partConcentration.map(p => ({ name: truncLabel(p.name, 20), defectQty: p.defectQty, pct: p.pct, count: p.count }))} layout="vertical" margin={{ top: 4, right: 80, bottom: 4, left: 4 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
+                  <XAxis type="number" tick={{ fontSize: 11 }} />
+                  <YAxis type="category" dataKey="name" tick={{ fontSize: 11 }} width={yAxisW(partConcentration.map(p => ({ name: truncLabel(p.name, 20) })), 'name', 20)} />
+                  <Tooltip formatter={(v, k) => [k === 'defectQty' ? v + 'EA' : v + '건', k === 'defectQty' ? '불량 수량' : '발생 건수']} />
+                  <Bar dataKey="defectQty" name="불량 수량" radius={[0, 4, 4, 0]}
+                    label={{ position: 'right', fontSize: 10, formatter: v => v > 0 ? v.toLocaleString() + 'EA' : '' }}>
+                    {partConcentration.map((d, i) => (
+                      <Cell key={i} fill={d.cumPct <= 50 ? '#ef4444' : d.cumPct <= 80 ? '#f59e0b' : '#94a3b8'} />
+                    ))}
+                  </Bar>
+                </BarChart>
+              </ResponsiveContainer>
+            )}
+            <div style={{ marginTop: 8, fontSize: 11, color: '#64748b', display: 'flex', gap: 12 }}>
+              <span><span style={{ display: 'inline-block', width: 10, height: 10, background: '#ef4444', borderRadius: 2, marginRight: 4 }} />누적 상위 50%</span>
+              <span><span style={{ display: 'inline-block', width: 10, height: 10, background: '#f59e0b', borderRadius: 2, marginRight: 4 }} />누적 50~80%</span>
+              <span><span style={{ display: 'inline-block', width: 10, height: 10, background: '#94a3b8', borderRadius: 2, marginRight: 4 }} />누적 하위 20%</span>
+            </div>
+          </div>
+
+          {/* 품목 집중도 테이블 */}
+          <div className="card">
+            <div className="card-title">📋 품목별 집중도 상세</div>
+            {partConcentration.length === 0 ? <div className="empty">데이터 없음</div> : (
+              <div className="table-wrap">
+                <table style={{ fontSize: 12 }}>
+                  <thead>
+                    <tr>
+                      <th style={{ textAlign: 'center', width: 36 }}>#</th>
+                      <th>품목</th>
+                      <th style={{ textAlign: 'center' }}>발생 건수</th>
+                      <th style={{ textAlign: 'center' }}>불량 수량</th>
+                      <th style={{ textAlign: 'center' }}>비중</th>
+                      <th style={{ textAlign: 'center' }}>누적</th>
+                      <th style={{ textAlign: 'center' }}>공급사 수</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {partConcentration.map((item, i) => (
+                      <tr key={item.name} style={{ background: item.cumPct <= 50 ? '#fff5f5' : item.cumPct <= 80 ? '#fffbeb' : '#fff' }}>
+                        <td style={{ textAlign: 'center', fontWeight: 700, color: '#94a3b8' }}>{i + 1}</td>
+                        <td><strong>{item.name}</strong></td>
+                        <td style={{ textAlign: 'center', fontWeight: 700 }}>{item.count}건</td>
+                        <td style={{ textAlign: 'center', fontWeight: 700, color: item.defectQty > 0 ? '#ef4444' : '#94a3b8' }}>{item.defectQty.toLocaleString()}EA</td>
+                        <td style={{ textAlign: 'center' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 6, justifyContent: 'center' }}>
+                            <div style={{ width: 48, height: 6, background: '#f1f5f9', borderRadius: 3, overflow: 'hidden' }}>
+                              <div style={{ width: `${item.pct}%`, height: '100%', background: item.cumPct <= 50 ? '#ef4444' : '#f59e0b', borderRadius: 3 }} />
+                            </div>
+                            <span style={{ fontWeight: 600 }}>{item.pct}%</span>
+                          </div>
+                        </td>
+                        <td style={{ textAlign: 'center' }}>
+                          <span style={{ fontWeight: 700, color: item.cumPct <= 80 ? '#ef4444' : '#64748b' }}>{item.cumPct}%</span>
+                        </td>
+                        <td style={{ textAlign: 'center', color: '#64748b' }}>{item.supplierCount}개사</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
         </div>
       )}
 
