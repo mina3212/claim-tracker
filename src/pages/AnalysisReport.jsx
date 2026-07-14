@@ -909,6 +909,140 @@ function YearCompareReport({ claims, supplierClaims, stages }) {
     borderColor: active ? '#0f172a' : '#e2e8f0',
   });
 
+  const yearInsights = useMemo(() => {
+    if (yearStats.length < 2) return [];
+    const items = [];
+    const last  = yearStats[yearStats.length - 1];
+    const prev  = yearStats[yearStats.length - 2];
+
+    // ─ 즉시 조치 ─
+    const risingYears = yearStats.filter((y, i) => i > 0 && y.cTotal > yearStats[i-1].cTotal).length;
+    if (risingYears >= 2 && yearStats.length >= 3) {
+      items.push({
+        priority: 'urgent',
+        title: `고객사 클레임 ${risingYears}년 연속 증가 추세`,
+        detail: `${yearStats.slice(-risingYears-1).map(y=>`${y.year}년 ${y.cTotal}건`).join(' → ')} — 단순 변동이 아닌 구조적 증가 패턴으로, 근본 원인 파악이 필요합니다.`,
+        action: '품질기술팀이 클레임 증가 원인을 제품군·고객사별로 분류 분석하고, 이번 분기 내 개선 목표치를 설정하세요.',
+        team: '품질기술팀 · 영업팀',
+      });
+    }
+
+    if (last.defRate > 3) {
+      items.push({
+        priority: 'urgent',
+        title: `${last.year}년 공급사 불량률 허용 기준 초과 — ${last.defRate}%`,
+        detail: `불량률 3% 기준을 초과했습니다. ${prev.year}년(${prev.defRate}%)과 비교 시 ${last.defRate > prev.defRate ? `▲ ${(last.defRate - prev.defRate).toFixed(2)}%p 악화` : `▼ ${(prev.defRate - last.defRate).toFixed(2)}%p 개선됐으나 여전히 기준 초과`}입니다.`,
+        action: 'SCM팀이 고불량 공급사에 8D 시정조치 요구서를 발행하고, 입고 전수검사 적용 대상을 확대하세요.',
+        team: 'SCM팀 · 품질기술팀',
+      });
+    }
+
+    // ─ 프로세스 개선 ─
+    const closeRateDrop = yearStats.length >= 2 &&
+      yearStats.slice(-Math.min(yearStats.length, 3)).every((y, i, arr) => i === 0 || y.closeRate < arr[i-1].closeRate);
+    if (closeRateDrop && last.closeRate < 70) {
+      const dropStart = yearStats[yearStats.length - Math.min(yearStats.length, 3)];
+      items.push({
+        priority: 'process',
+        title: `종결률 하락 추세 — ${dropStart.year}년 ${dropStart.closeRate}% → ${last.year}년 ${last.closeRate}%`,
+        detail: `종결률이 ${yearStats.length >= 3 ? '2년 이상' : '전년 대비'} 지속 하락하고 있습니다. 클레임 처리 속도보다 접수 속도가 빠르거나, 처리 프로세스에 병목이 발생했을 수 있습니다.`,
+        action: '각 처리 단계별 평균 소요일을 측정하고 병목 구간을 파악하세요. 처리 기한 기준을 명문화하고, 기한 초과 건에 대한 에스컬레이션 절차를 도입하세요.',
+        team: '품질기술팀 · 영업팀',
+      });
+    }
+
+    if (last.cTotal > 0 && last.sTotal > 0) {
+      const cRatio = last.cTotal / last.sTotal;
+      if (cRatio > 3) {
+        items.push({
+          priority: 'process',
+          title: `고객사 클레임 대비 공급사 불량 비율 불균형 (${last.year}년)`,
+          detail: `고객사 클레임 ${last.cTotal}건 / 공급사 불량 ${last.sTotal}건 — 비율이 ${cRatio.toFixed(1)}:1입니다. 공급사 불량 원인의 클레임 연계 추적이 이루어지지 않고 있을 수 있습니다.`,
+          action: '공급사 불량 발생 시 관련 고객사 클레임과의 연계 여부를 의무 확인하고, 원인 분석 단계에 공급사 귀책 여부 항목을 추가하세요.',
+          team: '품질기술팀',
+        });
+      }
+    }
+
+    // ─ 인력/교육 ─
+    const sameTopCustomer = yearStats.length >= 2 &&
+      yearStats.slice(-3).every(y => y.topCustomer?.[0] === last.topCustomer?.[0]);
+    if (sameTopCustomer && last.topCustomer) {
+      items.push({
+        priority: 'personnel',
+        title: `동일 고객사 클레임 집중 반복 — ${last.topCustomer[0]} (${Math.min(3, yearStats.length)}년 연속 1위)`,
+        detail: `${yearStats.slice(-3).map(y=>`${y.year}년 ${y.topCustomer?.[1]}건`).join(', ')} — 동일 고객사에서 매년 최다 클레임이 발생합니다. 해당 고객사 전담 관리가 필요합니다.`,
+        action: '영업·품질 합동으로 해당 고객사 방문 점검을 진행하고, 제품 사용 환경과 취급 방법을 재점검하세요. 필요시 전담 품질 담당자를 지정하세요.',
+        team: '영업팀 · 품질기술팀',
+      });
+    }
+
+    // ─ 공급사 관리 ─
+    const sameTopSupplier = yearStats.length >= 2 &&
+      yearStats.slice(-3).every(y => y.topSupplier?.[0] === last.topSupplier?.[0]);
+    if (sameTopSupplier && last.topSupplier) {
+      items.push({
+        priority: 'supply',
+        title: `동일 공급사 불량 집중 반복 — ${last.topSupplier[0]} (${Math.min(3, yearStats.length)}년 연속 1위)`,
+        detail: `${yearStats.slice(-3).map(y=>`${y.year}년 ${y.topSupplier?.[1]}건`).join(', ')} — 반복적인 집중은 해당 공급사의 근본적인 품질 관리 역량 문제를 시사합니다.`,
+        action: 'SCM팀이 해당 공급사와 연간 품질 개선 협약을 체결하고 분기별 현장 점검을 실시하세요. 중장기적으로 복수 공급사 확보를 추진하세요.',
+        team: 'SCM팀',
+      });
+    }
+
+    const doneRateDropYears = yearStats.filter((y, i) => i > 0 && y.sDoneRate < yearStats[i-1].sDoneRate && y.sDoneRate < 60).length;
+    if (doneRateDropYears >= 1 && last.sDoneRate < 60) {
+      items.push({
+        priority: 'supply',
+        title: `시정조치 완료율 저조 지속 — ${last.year}년 ${last.sDoneRate}%`,
+        detail: `${prev.year}년 ${prev.sDoneRate}%에서 ${last.year}년 ${last.sDoneRate}%로 하락했습니다. 공급사 조치 이행 추적 체계가 작동하지 않고 있습니다.`,
+        action: '미완료 건에 데드라인을 설정하고 공급사별 주간 이행률을 추적하세요. 2개 분기 연속 50% 미달 공급사는 구매 검토 대상에 포함하세요.',
+        team: 'SCM팀 · 품질기술팀',
+      });
+    }
+
+    // ─ 모니터링 ─
+    const defRateRising = yearStats.length >= 2 &&
+      last.defRate > prev.defRate && last.defRate > 1 && last.defRate <= 3;
+    if (defRateRising) {
+      items.push({
+        priority: 'monitor',
+        title: `공급사 불량률 상승 추세 — ${prev.year}년 ${prev.defRate}% → ${last.year}년 ${last.defRate}%`,
+        detail: `아직 허용 기준(3%) 이하이나 상승하고 있습니다. 이 추세가 지속되면 내년에 기준을 초과할 수 있습니다.`,
+        action: '현행 수입검사 체계를 점검하고, 불량률 상승 공급사를 집중 모니터링 대상으로 지정하세요. 분기 말 불량률이 2%를 초과하면 검사 강화를 즉시 적용하세요.',
+        team: '품질기술팀 · SCM팀',
+      });
+    }
+
+    if (last.closeRate >= 70 && last.defRate <= 1 && items.length === 0) {
+      items.push({
+        priority: 'monitor',
+        title: `${last.year}년 품질 지표 목표 달성 — 현수준 유지 권고`,
+        detail: `종결률 ${last.closeRate}%·불량률 ${last.defRate}%로 두 핵심 지표 모두 목표 기준을 충족하고 있습니다. ${yearStats.length >= 2 ? `전년(${prev.year}년) 대비 안정적 수준을 유지 중입니다.` : ''}`,
+        action: '현행 관리 체계를 유지하면서 연간 목표를 단계적으로 상향(종결률 80%, 불량률 0.5%)하는 것을 검토하세요.',
+        team: '품질기술팀',
+      });
+    }
+
+    return items;
+  }, [yearStats]);
+
+  const yearSummaryText = useMemo(() => {
+    if (yearStats.length === 0) return '';
+    const last = yearStats[yearStats.length - 1];
+    const first = yearStats[0];
+    const parts = [];
+    parts.push(`${first.year}~${last.year}년 ${yearStats.length}개년 데이터 기준, ${last.year}년 고객사 클레임 ${last.cTotal}건, 공급사 불량 ${last.sTotal}건이 접수되었습니다.`);
+    if (yearStats.length >= 2) {
+      const prev = yearStats[yearStats.length - 2];
+      const cDir = last.cTotal > prev.cTotal ? `전년 대비 ${last.cTotal - prev.cTotal}건 증가` : last.cTotal < prev.cTotal ? `전년 대비 ${prev.cTotal - last.cTotal}건 감소` : '전년과 동일';
+      parts.push(`클레임 건수는 ${cDir}하였으며, 종결률은 ${last.closeRate >= 70 ? `목표(70%) 달성(${last.closeRate}%)` : `목표(70%) 미달(${last.closeRate}%)`}입니다.`);
+    }
+    const urgentCnt = yearInsights.filter(i => i.priority === 'urgent').length;
+    if (urgentCnt > 0) parts.push(`연도별 추이 분석 결과 즉각적인 조치가 필요한 사항 ${urgentCnt}건이 확인되었습니다.`);
+    return parts.join(' ');
+  }, [yearStats, yearInsights]);
+
   if (allYears.length === 0) return (
     <div className="empty"><div className="empty-icon">📊</div>연도별 비교를 위한 데이터가 없습니다</div>
   );
@@ -1075,6 +1209,56 @@ function YearCompareReport({ claims, supplierClaims, stages }) {
           </div>
         );
       })()}
+
+      {/* 연도별 종합 인사이트 & Action Required */}
+      {yearInsights.length > 0 && (
+        <div className="card" style={{ padding: '20px 24px' }}>
+          <SectionTitle icon="🎯" title="연도별 종합 인사이트 & Action Required" />
+
+          {yearSummaryText && (
+            <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 10, padding: '14px 18px', marginBottom: 18, fontSize: 13, lineHeight: 1.75, color: '#334155' }}>
+              {yearSummaryText}
+            </div>
+          )}
+
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 20 }}>
+            {PRIORITY_CONFIG.map(pc => {
+              const cnt = yearInsights.filter(i => i.priority === pc.key).length;
+              if (!cnt) return null;
+              return (
+                <span key={pc.key} style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '4px 12px', borderRadius: 20, background: pc.bg, border: `1px solid ${pc.border}`, fontSize: 12, fontWeight: 700, color: pc.color }}>
+                  {pc.icon} {pc.label} <span style={{ background: pc.color, color: '#fff', borderRadius: 10, padding: '0 6px', fontSize: 11 }}>{cnt}</span>
+                </span>
+              );
+            })}
+          </div>
+
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+            {PRIORITY_CONFIG.map(pc =>
+              yearInsights.filter(i => i.priority === pc.key).map((item, idx) => (
+                <div key={`${pc.key}-${idx}`} style={{ border: `1.5px solid ${pc.border}`, borderLeft: `4px solid ${pc.color}`, borderRadius: 10, padding: '14px 18px', background: pc.bg }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+                    <span style={{ fontSize: 16 }}>{pc.icon}</span>
+                    <span style={{ fontSize: 11, fontWeight: 700, color: pc.color, background: '#fff', border: `1px solid ${pc.border}`, borderRadius: 6, padding: '2px 8px' }}>{pc.label}</span>
+                    <span style={{ fontSize: 13, fontWeight: 700, color: '#1e293b' }}>{item.title}</span>
+                  </div>
+                  <div style={{ fontSize: 12.5, color: '#475569', marginBottom: 10, lineHeight: 1.6 }}>{item.detail}</div>
+                  <div style={{ background: '#fff', border: `1px solid ${pc.border}`, borderRadius: 7, padding: '9px 13px' }}>
+                    <div style={{ fontSize: 11, fontWeight: 700, color: pc.color, marginBottom: 4 }}>권고 조치</div>
+                    <div style={{ fontSize: 12, color: '#334155', lineHeight: 1.6 }}>{item.action}</div>
+                    <div style={{ marginTop: 6, fontSize: 11, color: '#94a3b8' }}>담당: <strong style={{ color: '#64748b' }}>{item.team}</strong></div>
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+
+          <div style={{ marginTop: 20, paddingTop: 14, borderTop: '1px solid #e2e8f0', fontSize: 11, color: '#cbd5e1', display: 'flex', justifyContent: 'space-between' }}>
+            <span>비교 범위: {displayYears[0]} ~ {displayYears[displayYears.length-1]}년 ({displayYears.length}개년)</span>
+            <span>자동 생성 보고서 · AJW 클레임 트래커</span>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
