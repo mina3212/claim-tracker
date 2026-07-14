@@ -1,294 +1,140 @@
 import { useState, useMemo } from 'react';
+import {
+  BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell,
+  PieChart, Pie, CartesianGrid, Legend, LineChart, Line,
+} from 'recharts';
 import { useClaims } from '../context/ClaimsContext';
 import { useSupplierClaims } from '../context/SupplierClaimsContext';
 import { usePrintTitle } from '../context/PrintContext';
-import { DISPOSITION_COLORS } from '../lib/supabase';
+import { STAGES } from '../lib/supabase';
 
-function cnt(arr, key) {
+// ── 팔레트 ────────────────────────────────────────────────────
+const BLUE   = '#3b82f6';
+const AMBER  = '#f59e0b';
+const GREEN  = '#10b981';
+const RED    = '#ef4444';
+const PURPLE = '#8b5cf6';
+
+// ── Action Required 우선순위 설정 ─────────────────────────────
+const PRIORITY_CONFIG = [
+  { key: 'urgent',    icon: '🚨', label: '즉시 조치',    color: '#dc2626', bg: '#fee2e2', border: '#fecaca' },
+  { key: 'process',   icon: '🔄', label: '프로세스 개선', color: '#ea580c', bg: '#fff7ed', border: '#fed7aa' },
+  { key: 'personnel', icon: '👥', label: '인력/교육',     color: '#d97706', bg: '#fffbeb', border: '#fde68a' },
+  { key: 'supply',    icon: '🏭', label: '공급사 관리',   color: '#2563eb', bg: '#eff6ff', border: '#bfdbfe' },
+  { key: 'monitor',   icon: '👁️', label: '모니터링',     color: '#059669', bg: '#f0fdf4', border: '#bbf7d0' },
+];
+
+// ── 헬퍼 ──────────────────────────────────────────────────────
+function topN(arr, key, n = 5) {
   const m = {};
-  arr.forEach(c => { const k = c[key] || '미분류'; m[k] = (m[k] || 0) + 1; });
-  return Object.entries(m).sort(([,a],[,b]) => b-a);
+  arr.forEach(c => { const k = c[key] || '(미분류)'; m[k] = (m[k] || 0) + 1; });
+  return Object.entries(m).sort(([, a], [, b]) => b - a).slice(0, n);
 }
 
-function generateLocalReport(filteredC, filteredS, start, end, stages) {
-  const lines = [];
-  const now = new Date().toLocaleDateString('ko-KR');
-
-  /* ── 고객사 클레임 통계 ── */
-  const cTotal   = filteredC.length;
-  const cClosed  = filteredC.filter(c => c.current_stage === '종결').length;
-  const cPending = cTotal - cClosed;
-  const closeRate = cTotal > 0 ? ((cClosed / cTotal) * 100).toFixed(1) : '0';
-
-  const cByStage   = cnt(filteredC, 'current_stage');
-  const cByGroup   = cnt(filteredC, 'customer_group');
-  const cByCustomer = cnt(filteredC, 'customer_name');
-  const cByDefect  = cnt(filteredC, 'defect_type');
-  const cByProduct = cnt(filteredC, 'product_category');
-
-  // 원인 분석 (stages에서 파싱)
-  const causeCount = {};
-  const claimIdSet = new Set(filteredC.map(c => c.id));
-  (stages || []).forEach(s => {
-    if (s.stage_name !== '회수품 원인분석' || !claimIdSet.has(s.claim_id)) return;
-    const m = (s.description || '').match(/\[원인\]\s*(.+)/);
-    if (!m) return;
-    m[1].split(',').map(x => x.trim()).forEach(cause => {
-      causeCount[cause] = (causeCount[cause] || 0) + 1;
-    });
-  });
-  const cByCause = Object.entries(causeCount).sort(([,a],[,b]) => b-a);
-
-  /* ── 공급사 불량 통계 ── */
-  const sTotal   = filteredS.length;
-  const totalIn  = filteredS.reduce((s, c) => s + (c.quantity || 0), 0);
-  const totalDef = filteredS.reduce((s, c) => s + (c.defect_quantity || 0), 0);
-  const defRate  = totalIn > 0 ? ((totalDef / totalIn) * 100).toFixed(2) : '0';
-
-  const sBySupplier = cnt(filteredS, 'supplier_name');
-  const sByDefect   = cnt(filteredS, 'defect_type');
-  const sByDisp     = cnt(filteredS, 'disposition');
-  const sByStage    = cnt(filteredS, 'inspection_stage');
-
-  const sNoAction = filteredS.filter(c => !c.improvement_status || c.improvement_status === '미조치').length;
-  const sInProgress = filteredS.filter(c => c.improvement_status === '진행중').length;
-  const sDone = filteredS.filter(c => c.improvement_status === '완료').length;
-
-  /* ── 보고서 작성 ── */
-  lines.push(`# AJW 클레임 종합 분석 보고서`);
-  lines.push(`## 분석 기간: ${start} ~ ${end}  ·  작성일: ${now}`);
-  lines.push('');
-  lines.push('---');
-  lines.push('');
-
-  /* 핵심 요약 */
-  lines.push('## 📌 핵심 요약');
-  lines.push('');
-  if (cTotal > 0) {
-    lines.push(`- 분석 기간 고객사 클레임 **${cTotal}건** 접수 · 종결 **${cClosed}건** (종결률 **${closeRate}%**) · 미결 **${cPending}건**`);
-    if (parseFloat(closeRate) < 50 && cTotal >= 3)
-      lines.push(`  - ⚠️ 종결률이 50% 미만입니다. 미결 클레임 ${cPending}건에 대한 신속한 처리가 필요합니다.`);
-  } else {
-    lines.push('- 해당 기간 고객사 클레임 데이터 없음');
-  }
-  if (sTotal > 0) {
-    lines.push(`- 공급사 불량 **${sTotal}건** · 총 입고 **${totalIn.toLocaleString()}EA** 중 불량 **${totalDef.toLocaleString()}EA** (전체 불량률 **${defRate}%**)`);
-    if (parseFloat(defRate) > 5)
-      lines.push(`  - ⚠️ 전체 불량률이 5%를 초과했습니다. 즉각적인 원인 분석과 공급사 대응이 필요합니다.`);
-    if (sNoAction > 0)
-      lines.push(`  - ⚠️ 시정조치 미완료 **${sNoAction + sInProgress}건** (미조치 ${sNoAction}건 · 진행중 ${sInProgress}건)`);
-  } else {
-    lines.push('- 해당 기간 공급사 불량 데이터 없음');
-  }
-  if (cTotal === 0 && sTotal === 0) {
-    lines.push('');
-    lines.push('> 선택한 기간에 분석할 데이터가 없습니다.');
-    return lines.join('\n');
-  }
-  lines.push('');
-
-  /* ── 고객사 클레임 현황 ── */
-  if (cTotal > 0) {
-    lines.push('---');
-    lines.push('');
-    lines.push('## 🏢 고객사 클레임 현황');
-    lines.push('');
-
-    lines.push('### 단계별 현황');
-    cByStage.forEach(([stage, n]) => {
-      const bar = '█'.repeat(Math.round(n / cTotal * 20));
-      lines.push(`- **${stage}**: ${n}건 (${(n/cTotal*100).toFixed(0)}%) ${bar}`);
-    });
-    lines.push('');
-
-    if (cByGroup.length > 0) {
-      lines.push('### 고객사 그룹별');
-      cByGroup.slice(0, 5).forEach(([g, n]) => lines.push(`- ${g}: ${n}건`));
-      lines.push('');
-    }
-
-    if (cByCustomer.length > 0) {
-      lines.push('### 주요 고객사 TOP 5');
-      cByCustomer.slice(0, 5).forEach(([name, n], i) =>
-        lines.push(`${i + 1}. **${name}**: ${n}건 (${(n/cTotal*100).toFixed(0)}%)`));
-      lines.push('');
-    }
-
-    if (cByDefect.length > 0) {
-      lines.push('### 불량 유형');
-      cByDefect.slice(0, 6).forEach(([t, n]) => lines.push(`- ${t}: ${n}건`));
-      lines.push('');
-    }
-
-    if (cByProduct.length > 0) {
-      lines.push('### 품목군별');
-      cByProduct.slice(0, 5).forEach(([p, n]) => lines.push(`- ${p}: ${n}건`));
-      lines.push('');
-    }
-
-    if (cByCause.length > 0) {
-      lines.push('### 원인 분석 결과');
-      cByCause.forEach(([cause, n]) => lines.push(`- ${cause}: ${n}건`));
-      lines.push('');
-    }
-  }
-
-  /* ── 공급사 불량 현황 ── */
-  if (sTotal > 0) {
-    lines.push('---');
-    lines.push('');
-    lines.push('## 🏭 공급사 불량 현황');
-    lines.push('');
-    lines.push(`- 총 발생: **${sTotal}건**  ·  입고 **${totalIn.toLocaleString()}EA**  ·  불량 **${totalDef.toLocaleString()}EA**  ·  불량률 **${defRate}%**`);
-    lines.push('');
-
-    lines.push('### 처리결과 현황');
-    const dispWithDefault = sByDisp.length > 0 ? sByDisp : [['미결', sTotal]];
-    dispWithDefault.forEach(([d, n]) => lines.push(`- **${d || '미결'}**: ${n}건`));
-    lines.push('');
-
-    lines.push('### 시정조치 현황');
-    lines.push(`- 미조치: **${sNoAction}건**`);
-    lines.push(`- 진행중: **${sInProgress}건**`);
-    lines.push(`- 완료:   **${sDone}건**`);
-    lines.push('');
-
-    if (sBySupplier.length > 0) {
-      lines.push('### 불량 공급사 TOP 5');
-      sBySupplier.slice(0, 5).forEach(([name, n], i) =>
-        lines.push(`${i + 1}. **${name}**: ${n}건 (${(n/sTotal*100).toFixed(0)}%)`));
-      lines.push('');
-    }
-
-    if (sByDefect.length > 0) {
-      lines.push('### 불량 유형별');
-      sByDefect.slice(0, 6).forEach(([t, n]) => lines.push(`- ${t}: ${n}건`));
-      lines.push('');
-    }
-
-    if (sByStage.length > 0) {
-      lines.push('### 검사 단계별');
-      sByStage.forEach(([s, n]) => lines.push(`- ${s}: ${n}건`));
-      lines.push('');
-    }
-  }
-
-  /* ── 주요 이슈 ── */
-  lines.push('---');
-  lines.push('');
-  lines.push('## ⚠️ 주요 이슈 및 패턴');
-  lines.push('');
-
-  const issues = [];
-  if (cTotal > 0 && parseFloat(closeRate) < 60 && cPending >= 2)
-    issues.push(`고객사 클레임 종결률 **${closeRate}%** — 미결 **${cPending}건**이 장기 체류 중입니다. 단계별 병목 원인을 점검하세요.`);
-  if (cByCustomer.length > 0 && cByCustomer[0][1] / cTotal >= 0.3)
-    issues.push(`**${cByCustomer[0][0]}** 단일 고객사 집중: 전체의 ${(cByCustomer[0][1]/cTotal*100).toFixed(0)}% (${cByCustomer[0][1]}건). 해당 고객사와의 품질 협의 필요.`);
-  if (cByCause.length > 0 && cByCause[0][1] >= 2)
-    issues.push(`반복 발생 원인 **${cByCause[0][0]}** (${cByCause[0][1]}건) — 재발방지 대책의 실효성 점검 필요.`);
-  if (sTotal > 0 && parseFloat(defRate) > 3)
-    issues.push(`공급사 전체 불량률 **${defRate}%** — 허용 기준(3%) 초과. 수입검사 강화 또는 공급사 평가 재검토가 필요합니다.`);
-  if (sBySupplier.length > 0 && sBySupplier[0][1] / sTotal >= 0.4)
-    issues.push(`**${sBySupplier[0][0]}** 단일 공급사 집중: 전체의 ${(sBySupplier[0][1]/sTotal*100).toFixed(0)}% (${sBySupplier[0][1]}건). 해당 공급사에 대한 집중 관리 필요.`);
-  if (sNoAction >= 3)
-    issues.push(`시정조치 미등록 **${sNoAction}건** — 불량 발생 후 조치가 취해지지 않은 건이 다수입니다. 즉시 담당자를 지정해 조치 계획을 수립하세요.`);
-
-  if (issues.length === 0) {
-    lines.push('- 분석 기간 내 특별한 집중 이슈가 발견되지 않았습니다.');
-  } else {
-    issues.forEach(iss => lines.push(`- ${iss}`));
-  }
-  lines.push('');
-
-  /* ── 개선 권고사항 ── */
-  lines.push('---');
-  lines.push('');
-  lines.push('## 💡 개선 권고사항');
-  lines.push('');
-
-  const recs = [];
-  if (cPending > 0)
-    recs.push(`**[품질기술팀·영업팀]** 미결 클레임 ${cPending}건 진행 현황을 일괄 점검하고, 30일 이상 지연된 건은 조기 종결 조치를 취하세요.`);
-  if (cByCause.length > 0)
-    recs.push(`**[품질기술팀]** 주요 원인 "${cByCause[0][0]}" 재발방지 대책의 현장 적용 여부를 확인하고, 개선 효과를 수치로 측정할 기준을 마련하세요.`);
-  if (sBySupplier.length > 0)
-    recs.push(`**[SCM팀(내수)]** 불량 상위 공급사(${sBySupplier.slice(0, 2).map(([n]) => n).join(', ')})에 대해 공식 클레임 통보 및 시정조치 요구서를 발행하고 다음 입고 시 전수검사를 실시하세요.`);
-  if (sNoAction >= 2)
-    recs.push(`**[품질기술팀]** 시정조치 미등록 ${sNoAction}건에 대해 조치 유형(공급사 클레임·작업자 교육·공정 변경 등)을 등록하고 완료 일정을 수립하세요.`);
-  if (parseFloat(defRate) > 3)
-    recs.push(`**[SCM팀(내수)·품질기술팀]** 공급사 정기 품질 평가 주기를 단축하고, 불량률 기준(예: 3% 초과 시 경고, 5% 초과 시 거래 재검토) 관리 기준을 내규화하세요.`);
-
-  if (recs.length === 0)
-    recs.push('데이터가 충분하지 않아 구체적 권고사항을 도출하기 어렵습니다. 더 많은 데이터가 누적된 후 재분석을 권장합니다.');
-
-  recs.forEach((r, i) => lines.push(`${i + 1}. ${r}`));
-  lines.push('');
-  lines.push('---');
-  lines.push('');
-  lines.push(`> *본 보고서는 ${start} ~ ${end} 기간의 데이터를 기반으로 자동 생성되었습니다. 고객사 클레임 ${cTotal}건 + 공급사 불량 ${sTotal}건 분석.*`);
-
-  return lines.join('\n');
+function statusColor(rate, lo = 1, hi = 3) {
+  return parseFloat(rate) <= lo ? GREEN : parseFloat(rate) <= hi ? AMBER : RED;
+}
+function statusBg(rate, lo = 1, hi = 3) {
+  return parseFloat(rate) <= lo ? '#f0fdf4' : parseFloat(rate) <= hi ? '#fffbeb' : '#fef2f2';
+}
+function statusBorder(rate, lo = 1, hi = 3) {
+  return parseFloat(rate) <= lo ? '#bbf7d0' : parseFloat(rate) <= hi ? '#fde68a' : '#fecaca';
 }
 
-/* ── 마크다운 → HTML 변환 ── */
-function mdToHtml(text) {
-  if (!text) return '';
-  const lines = text.split('\n');
-  const out = [];
-  let inUl = false;
-
-  const inline = (s) => s
-    .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
-    .replace(/\*(.+?)\*/g, '<em>$1</em>')
-    .replace(/`(.+?)`/g, '<code style="background:#f1f5f9;padding:1px 5px;border-radius:3px;font-size:.9em">$1</code>');
-
-  for (let i = 0; i < lines.length; i++) {
-    const line = lines[i];
-    const isLi = /^[-*] /.test(line);
-    if (!isLi && inUl) { out.push('</ul>'); inUl = false; }
-
-    if (/^# /.test(line)) {
-      out.push(`<h1 style="font-size:20px;font-weight:800;color:#0f172a;margin:0 0 20px;padding-bottom:10px;border-bottom:3px solid #3b82f6">${inline(line.slice(2))}</h1>`);
-    } else if (/^## /.test(line)) {
-      out.push(`<h2 style="font-size:16px;font-weight:700;color:#1e293b;margin:28px 0 10px;padding-bottom:6px;border-bottom:2px solid #e2e8f0">${inline(line.slice(3))}</h2>`);
-    } else if (/^### /.test(line)) {
-      out.push(`<h3 style="font-size:14px;font-weight:700;color:#334155;margin:18px 0 8px">${inline(line.slice(4))}</h3>`);
-    } else if (isLi) {
-      if (!inUl) { out.push('<ul style="margin:8px 0 12px;padding-left:22px">'); inUl = true; }
-      out.push(`<li style="margin:5px 0;color:#374151;line-height:1.6">${inline(line.replace(/^[-*] /, ''))}</li>`);
-    } else if (line.trim() === '') {
-      out.push('<br/>');
-    } else {
-      out.push(`<p style="margin:6px 0;color:#374151;line-height:1.7">${inline(line)}</p>`);
-    }
-  }
-  if (inUl) out.push('</ul>');
-  return out.join('');
+// ── 서브 컴포넌트 ─────────────────────────────────────────────
+function SectionTitle({ icon, title, color = '#1e293b' }) {
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 18 }}>
+      <span style={{ fontSize: 18 }}>{icon}</span>
+      <h2 style={{ margin: 0, fontSize: 15, fontWeight: 700, color }}>{title}</h2>
+    </div>
+  );
 }
 
+function KpiTile({ label, value, sub, color, bg, border }) {
+  return (
+    <div style={{ background: bg, border: `1px solid ${border}`, borderRadius: 12, padding: '16px 20px', textAlign: 'center' }}>
+      <div style={{ fontSize: 11, color: '#64748b', fontWeight: 600, marginBottom: 6 }}>{label}</div>
+      <div style={{ fontSize: 26, fontWeight: 800, color, lineHeight: 1 }}>{value}</div>
+      {sub && <div style={{ fontSize: 11, color: '#94a3b8', marginTop: 6 }}>{sub}</div>}
+    </div>
+  );
+}
+
+function HBar({ name, count, total, color, rank }) {
+  const pct = total > 0 ? Math.round(count / total * 100) : 0;
+  return (
+    <div style={{ marginBottom: 10 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 3 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+          {rank != null && (
+            <span style={{ fontSize: 10, fontWeight: 700, color: rank === 1 ? AMBER : '#94a3b8', width: 14, textAlign: 'center' }}>{rank}</span>
+          )}
+          <span style={{ fontSize: 12, fontWeight: rank === 1 ? 700 : 400, color: '#1e293b', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 180 }}>{name}</span>
+        </div>
+        <span style={{ fontSize: 11, color: '#64748b', flexShrink: 0, marginLeft: 8 }}>
+          {count}건 <span style={{ color: '#cbd5e1' }}>({pct}%)</span>
+        </span>
+      </div>
+      <div style={{ background: '#f1f5f9', borderRadius: 4, height: 7, overflow: 'hidden' }}>
+        <div style={{ background: color, width: `${pct}%`, height: '100%', borderRadius: 4 }} />
+      </div>
+    </div>
+  );
+}
+
+function IssueCard({ text }) {
+  return (
+    <div style={{ background: '#fef2f2', border: '1px solid #fecaca', borderLeft: '4px solid #ef4444', borderRadius: 8, padding: '10px 14px', marginBottom: 8 }}>
+      <span style={{ fontSize: 13, color: '#374151', lineHeight: 1.6 }}>⚠️ {text}</span>
+    </div>
+  );
+}
+
+function RecCard({ idx, text }) {
+  return (
+    <div style={{ background: '#eff6ff', border: '1px solid #bfdbfe', borderLeft: '4px solid #3b82f6', borderRadius: 8, padding: '10px 14px', marginBottom: 8 }}>
+      <div style={{ fontSize: 10, fontWeight: 700, color: '#3b82f6', marginBottom: 3 }}>권고 {idx}</div>
+      <span style={{ fontSize: 13, color: '#374151', lineHeight: 1.6 }}>{text}</span>
+    </div>
+  );
+}
+
+function ChartTip({ active, payload, label }) {
+  if (!active || !payload?.length) return null;
+  return (
+    <div style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: 8, padding: '8px 12px', boxShadow: '0 4px 12px rgba(0,0,0,.1)', fontSize: 12 }}>
+      <div style={{ fontWeight: 700, marginBottom: 4, color: '#1e293b' }}>{label}</div>
+      {payload.map(p => (
+        <div key={p.name} style={{ color: p.color || '#374151' }}>
+          {p.name !== 'count' ? p.name + ': ' : ''}<strong>{p.value}건</strong>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function SubTitle({ children }) {
+  return <div style={{ fontSize: 12, fontWeight: 700, color: '#475569', marginBottom: 12 }}>{children}</div>;
+}
+
+// ── 기본 기간 ─────────────────────────────────────────────────
 const defaultStart = () => {
-  const d = new Date();
-  d.setMonth(d.getMonth() - 1);
+  const d = new Date(); d.setMonth(d.getMonth() - 3);
   return d.toISOString().slice(0, 10);
 };
 const defaultEnd = () => new Date().toISOString().slice(0, 10);
 
-function topEntries(items, key, n = 5) {
-  const cnt = {};
-  items.forEach(c => { const k = c[key] || '(미분류)'; cnt[k] = (cnt[k] || 0) + 1; });
-  return Object.entries(cnt).sort(([,a],[,b]) => b-a).slice(0, n);
-}
-
+// ── 메인 ──────────────────────────────────────────────────────
 export default function AnalysisReport({ embedded = false }) {
-  const { claims, stages }   = useClaims();
+  const { claims, stages }         = useClaims();
   const { claims: supplierClaims } = useSupplierClaims();
-  const { setPrintTitle } = usePrintTitle();
+  const { setPrintTitle }          = usePrintTitle();
 
-  const [start,      setStart]      = useState(defaultStart);
-  const [end,        setEnd]        = useState(defaultEnd);
-  const [report,     setReport]     = useState('');
-  const [generating, setGenerating] = useState(false);
-  const [error,      setError]      = useState('');
+  const [mode,  setMode]  = useState('period'); // 'period' | 'year'
+  const [start, setStart] = useState(defaultStart);
+  const [end,   setEnd]   = useState(defaultEnd);
+  const [shown, setShown] = useState(false);
 
   const filteredC = useMemo(() => claims.filter(c => {
     const d = c.receipt_date || c.created_at?.slice(0, 10) || '';
@@ -300,237 +146,935 @@ export default function AnalysisReport({ embedded = false }) {
     return d >= start && d <= end;
   }), [supplierClaims, start, end]);
 
-  const total = filteredC.length + filteredS.length;
+  // ── 고객사 통계 ──────────────────────────────────────────────
+  const C = useMemo(() => {
+    const total   = filteredC.length;
+    const closed  = filteredC.filter(c => c.current_stage === '종결').length;
+    const pending = total - closed;
+    const closeRate = total > 0 ? (closed / total * 100).toFixed(1) : '0';
 
-  /* ── 요약 통계 (AI 없이도 항상 표시) ── */
-  const stats = useMemo(() => {
-    const cClosed   = filteredC.filter(c => c.current_stage === '종결').length;
-    const cPending  = filteredC.length - cClosed;
-    const sPending  = filteredS.filter(c => !c.disposition).length;
-    const sDone     = filteredS.filter(c =>  c.disposition).length;
+    const byStage = STAGES
+      .map(s => ({ name: s, count: filteredC.filter(c => c.current_stage === s).length }))
+      .filter(d => d.count > 0);
 
+    const causeMap = {};
+    const idSet = new Set(filteredC.map(c => c.id));
+    (stages || []).forEach(s => {
+      if (s.stage_name !== '회수품 원인분석' || !idSet.has(s.claim_id)) return;
+      const m = (s.description || '').match(/\[원인\]\s*(.+)/);
+      if (!m) return;
+      m[1].split(',').map(x => x.trim()).forEach(k => { causeMap[k] = (causeMap[k] || 0) + 1; });
+    });
+    const byCause = Object.entries(causeMap).sort(([, a], [, b]) => b - a);
+
+    const monthlyMap = {};
+    filteredC.forEach(c => {
+      const m = (c.receipt_date || c.created_at?.slice(0, 10) || '').slice(0, 7);
+      if (m) monthlyMap[m] = (monthlyMap[m] || 0) + 1;
+    });
+
+    return {
+      total, closed, pending, closeRate, byStage, byCause,
+      topCustomers: topN(filteredC, 'customer_name'),
+      topDefects:   topN(filteredC, 'defect_type'),
+      monthly:      Object.entries(monthlyMap).sort().map(([m, n]) => ({ month: m.slice(5), count: n })),
+    };
+  }, [filteredC, stages]);
+
+  // ── 공급사 통계 ──────────────────────────────────────────────
+  const S = useMemo(() => {
+    const total    = filteredS.length;
     const totalIn  = filteredS.reduce((s, c) => s + (c.quantity || 0), 0);
     const totalDef = filteredS.reduce((s, c) => s + (c.defect_quantity || 0), 0);
-    const defRate  = totalIn > 0 ? ((totalDef / totalIn) * 100).toFixed(2) : null;
+    const defRate  = totalIn > 0 ? (totalDef / totalIn * 100).toFixed(2) : '0';
 
-    const topCustomers  = topEntries(filteredC, 'customer_name');
-    const topCDefects   = topEntries(filteredC, 'defect_type');
-    const topSuppliers  = topEntries(filteredS, 'supplier_name');
-    const topSDefects   = topEntries(filteredS, 'defect_type');
-    const dispositions  = topEntries(filteredS, 'disposition');
+    const noAction   = filteredS.filter(c => !c.improvement_status || c.improvement_status === '미조치').length;
+    const inProgress = filteredS.filter(c => c.improvement_status === '진행중').length;
+    const done       = filteredS.filter(c => c.improvement_status === '완료').length;
+    const doneRate   = total > 0 ? (done / total * 100).toFixed(0) : '0';
 
-    return { cClosed, cPending, sPending, sDone, totalIn, totalDef, defRate, topCustomers, topCDefects, topSuppliers, topSDefects, dispositions };
-  }, [filteredC, filteredS]);
+    const donut = [
+      { name: '미조치', value: noAction,   color: RED },
+      { name: '진행중', value: inProgress, color: AMBER },
+      { name: '완료',   value: done,       color: GREEN },
+    ].filter(d => d.value > 0);
+
+    const supMap = {};
+    filteredS.forEach(c => {
+      const k = c.supplier_name || '(미분류)';
+      if (!supMap[k]) supMap[k] = { count: 0, qty: 0, def: 0 };
+      supMap[k].count++;
+      supMap[k].qty += c.quantity || 0;
+      supMap[k].def += c.defect_quantity || 0;
+    });
+    const topSuppliers = Object.entries(supMap)
+      .sort(([, a], [, b]) => b.count - a.count).slice(0, 5)
+      .map(([name, d]) => ({ name, count: d.count, rate: d.qty > 0 ? (d.def / d.qty * 100).toFixed(1) : '0' }));
+
+    const monthlyMap = {};
+    filteredS.forEach(c => {
+      const m = (c.incoming_date || c.created_at?.slice(0, 10) || '').slice(0, 7);
+      if (m) monthlyMap[m] = (monthlyMap[m] || 0) + 1;
+    });
+
+    return {
+      total, totalIn, totalDef, defRate, noAction, inProgress, done, doneRate, donut, topSuppliers,
+      topDefects: topN(filteredS, 'defect_type'),
+      byStage:    topN(filteredS, 'inspection_stage'),
+      monthly:    Object.entries(monthlyMap).sort().map(([m, n]) => ({ month: m.slice(5), count: n })),
+    };
+  }, [filteredS]);
+
+  // ── 이슈 & 권고 ──────────────────────────────────────────────
+  const { issues, recs } = useMemo(() => {
+    const issues = [], recs = [];
+    if (C.total > 0 && parseFloat(C.closeRate) < 60 && C.pending >= 2)
+      issues.push(`고객사 클레임 종결률 ${C.closeRate}% — 미결 ${C.pending}건이 체류 중입니다. 단계별 병목을 점검하세요.`);
+    if (C.topCustomers.length && C.topCustomers[0][1] / C.total >= 0.3)
+      issues.push(`"${C.topCustomers[0][0]}" 단일 고객사 집중: 전체의 ${(C.topCustomers[0][1]/C.total*100).toFixed(0)}% (${C.topCustomers[0][1]}건). 해당 고객사와 품질 협의가 필요합니다.`);
+    if (C.byCause.length && C.byCause[0][1] >= 2)
+      issues.push(`반복 발생 원인 "${C.byCause[0][0]}" (${C.byCause[0][1]}건) — 재발방지 대책의 실효성을 점검하세요.`);
+    if (S.total && parseFloat(S.defRate) > 3)
+      issues.push(`공급사 전체 불량률 ${S.defRate}% — 허용 기준(3%) 초과. 수입검사 강화 또는 공급사 평가 재검토가 필요합니다.`);
+    if (S.topSuppliers.length && S.topSuppliers[0].count / S.total >= 0.4)
+      issues.push(`"${S.topSuppliers[0].name}" 단일 공급사 집중: 전체의 ${(S.topSuppliers[0].count/S.total*100).toFixed(0)}% (${S.topSuppliers[0].count}건). 집중 관리 필요.`);
+    if (S.noAction >= 3)
+      issues.push(`시정조치 미등록 ${S.noAction}건 — 담당자를 지정하고 즉시 조치 계획을 수립하세요.`);
+
+    if (C.pending > 0)
+      recs.push(`[품질기술팀·영업팀] 미결 클레임 ${C.pending}건 진행 현황을 일괄 점검하고, 30일 이상 지연 건은 조기 종결 조치를 취하세요.`);
+    if (C.byCause.length)
+      recs.push(`[품질기술팀] 주요 원인 "${C.byCause[0][0]}" 재발방지 대책의 현장 적용 여부를 확인하고, 개선 효과를 수치로 측정할 기준을 마련하세요.`);
+    if (S.topSuppliers.length)
+      recs.push(`[SCM팀] 불량 상위 공급사(${S.topSuppliers.slice(0, 2).map(s => s.name).join(', ')})에 공식 클레임 통보 및 시정조치 요구서를 발행하고 다음 입고 시 전수검사를 실시하세요.`);
+    if (S.noAction >= 2)
+      recs.push(`[품질기술팀] 시정조치 미등록 ${S.noAction}건에 조치 유형을 등록하고 완료 일정을 수립하세요.`);
+    if (parseFloat(S.defRate) > 3)
+      recs.push(`[SCM팀·품질기술팀] 공급사 정기 품질 평가 주기를 단축하고, 불량률 3% 초과 시 경고·5% 초과 시 거래 재검토 기준을 내규화하세요.`);
+    return { issues, recs };
+  }, [C, S]);
+
+  // ── 서술형 Action Required 인사이트 ──────────────────────────
+  const actionInsights = useMemo(() => {
+    const items = [];
+    const today = new Date();
+    const daysSince = (dateStr) => dateStr
+      ? Math.round((today - new Date(dateStr)) / 86400000)
+      : 0;
+
+    // ─ 즉시 조치 ─
+    const longPending60 = filteredC.filter(c => {
+      if (c.current_stage === '종결') return false;
+      const d = c.receipt_date || (c.created_at || '').slice(0, 10);
+      return d && daysSince(d) >= 60;
+    });
+    if (longPending60.length > 0) {
+      const names = [...new Set(longPending60.map(c => c.customer_name).filter(Boolean))].slice(0, 3);
+      items.push({
+        priority: 'urgent',
+        title: `장기 미처리 클레임 ${longPending60.length}건 (60일+)`,
+        detail: `${names.join(', ')}${longPending60.length > names.length ? ` 외 ${longPending60.length - names.length}건` : ''} — 각 건이 60일 이상 단계에 체류 중입니다.`,
+        action: '품질기술팀·영업팀이 금주 내 각 고객사와 종결 일정을 합의하고, 90일+ 건은 팀장 에스컬레이션을 진행하세요.',
+        team: '품질기술팀 · 영업팀',
+      });
+    }
+
+    const highRateSuppliers = S.topSuppliers.filter(s => parseFloat(s.rate) >= 5);
+    if (highRateSuppliers.length > 0) {
+      items.push({
+        priority: 'urgent',
+        title: `고불량률 공급사 ${highRateSuppliers.length}개사 — 불량률 5% 초과`,
+        detail: `${highRateSuppliers.map(s => `${s.name}(${s.rate}%)`).join(', ')} — 허용 기준(5%)을 초과한 상태로 즉각적인 조치가 필요합니다.`,
+        action: 'SCM팀이 해당 공급사에 긴급 시정조치 요구서(8D 포맷)를 발행하고, 다음 입고분은 전수검사로 전환하세요.',
+        team: 'SCM팀 · 품질기술팀',
+      });
+    }
+
+    if (S.noAction >= 5) {
+      items.push({
+        priority: 'urgent',
+        title: `시정조치 미등록 ${S.noAction}건 — 담당자 미지정`,
+        detail: `공급사 불량 ${S.total}건 중 ${S.noAction}건에 조치 계획이 없습니다. 방치 시 재발 위험이 높습니다.`,
+        action: '품질기술팀이 이번 주 내 미등록 건에 조치 담당자를 지정하고, 2주 내 조치 완료를 목표로 계획을 수립하세요.',
+        team: '품질기술팀',
+      });
+    }
+
+    // ─ 프로세스 개선 ─
+    const comboCnt = {};
+    filteredC.forEach(c => {
+      if (!c.customer_name || !c.part_number) return;
+      const key = `${c.customer_name}||${c.part_number}`;
+      comboCnt[key] = (comboCnt[key] || 0) + 1;
+    });
+    const repeatCombos = Object.entries(comboCnt).filter(([, v]) => v >= 2).sort(([, a], [, b]) => b - a);
+    if (repeatCombos.length > 0) {
+      const [[topKey, topCnt]] = repeatCombos;
+      const [cust, part] = topKey.split('||');
+      items.push({
+        priority: 'process',
+        title: `동일 품목 재발 ${repeatCombos.length}조합 — 시정조치 실효성 의심`,
+        detail: `재발 최다: "${cust}" × 품번 ${part} (${topCnt}회). 조치 후에도 동일 불량이 반복 발생하고 있어 근본 원인이 해결되지 않았을 가능성이 있습니다.`,
+        action: '해당 품목의 원인분석 이력을 검토하고, 조치 내용이 현장 공정/검사 기준서에 실제로 반영됐는지 확인하세요. 재발 시 4M 원인 재분석을 의무화하세요.',
+        team: '품질기술팀',
+      });
+    }
+
+    if (C.total >= 3 && parseFloat(C.closeRate) < 50) {
+      items.push({
+        priority: 'process',
+        title: `클레임 처리 프로세스 정체 — 종결률 ${C.closeRate}%`,
+        detail: `전체 ${C.total}건 중 ${C.pending}건이 미결 상태입니다. 단계별 처리 절차에 병목이 있거나 담당자 간 업무 이관이 원활하지 않은 상태입니다.`,
+        action: '각 단계별 평균 체류 시간을 측정하고, 14일 이상 정체 건에 대해 자동 알림 또는 주간 미결 보고 체계를 도입하세요.',
+        team: '품질기술팀 · 영업팀',
+      });
+    }
+
+    const postInspectionCnt = filteredS.filter(c => c.inspection_stage && c.inspection_stage !== '수입검사').length;
+    if (filteredS.length >= 3 && postInspectionCnt / filteredS.length >= 0.3) {
+      items.push({
+        priority: 'process',
+        title: `수입검사 이후 단계 불량 검출 비율 ${Math.round(postInspectionCnt / filteredS.length * 100)}%`,
+        detail: `불량 ${filteredS.length}건 중 ${postInspectionCnt}건이 공정/완성 검사에서 뒤늦게 발견됐습니다. 수입검사에서 선제적으로 걸러내지 못하고 있습니다.`,
+        action: '수입검사 체크리스트에 해당 불량 유형을 추가하고, 반복 발생 품목은 전수검사 또는 샘플 수량을 늘리세요.',
+        team: '품질기술팀 · SCM팀',
+      });
+    }
+
+    // ─ 인력/교육 개선 ─
+    const faultCount = C.byCause.find(([k]) => k.includes('과실') || k.includes('오용'))?.[1] || 0;
+    const causeTotalCount = C.byCause.reduce((s, [, v]) => s + v, 0);
+    if (faultCount >= 2 && causeTotalCount > 0 && faultCount / causeTotalCount >= 0.3) {
+      items.push({
+        priority: 'personnel',
+        title: `사용자 과실 원인 집중 — 원인 분석 대비 ${Math.round(faultCount / causeTotalCount * 100)}%`,
+        detail: `원인 분석 ${causeTotalCount}건 중 ${faultCount}건이 사용자 과실로 분류됩니다. 제품 취급 방법에 대한 고객 교육이 부족하거나, 제품 설명이 불명확할 수 있습니다.`,
+        action: '영업팀이 사용자 과실 발생 고객사에 제품 취급 매뉴얼과 주의사항을 재배포하고, 현장 사용 교육을 실시하세요. 지속 발생 시 경고 라벨 또는 인터락 설계 개선을 검토하세요.',
+        team: '영업팀 · 기술지원팀',
+      });
+    }
+
+    const repMap = {};
+    filteredC.forEach(c => { if (c.sales_rep_name) repMap[c.sales_rep_name] = (repMap[c.sales_rep_name] || 0) + 1; });
+    const topRep = Object.entries(repMap).sort(([, a], [, b]) => b - a)[0];
+    if (topRep && C.total >= 5 && topRep[1] / C.total >= 0.5) {
+      items.push({
+        priority: 'personnel',
+        title: `영업담당자별 클레임 편중: ${topRep[0]} (${Math.round(topRep[1] / C.total * 100)}%)`,
+        detail: `전체 클레임의 절반 이상이 한 명의 담당자 관할에서 발생합니다. 담당 고객사의 품질 관리 방식이나 소통 채널에 문제가 있을 수 있습니다.`,
+        action: '팀장이 해당 담당자와 주 1회 클레임 현황을 공유하고, 반복 발생 고객사는 품질기술팀과 합동 방문을 진행하세요.',
+        team: '영업팀장',
+      });
+    }
+
+    // ─ 공급사 관리 ─
+    if (S.topSuppliers.length && S.total >= 5 && S.topSuppliers[0].count / S.total >= 0.4) {
+      const top = S.topSuppliers[0];
+      items.push({
+        priority: 'supply',
+        title: `공급사 불량 집중: ${top.name} — 전체의 ${Math.round(top.count / S.total * 100)}%`,
+        detail: `${top.count}건(${Math.round(top.count / S.total * 100)}%)이 한 개 공급사에서 발생합니다. 해당 공급사 의존도가 높아 공급망 리스크가 큽니다.`,
+        action: 'SCM팀이 해당 공급사와 품질 개선 협약을 체결하고 월 1회 이상 현장 점검을 실시하세요. 중장기적으로 대안 공급사 확보를 검토하세요.',
+        team: 'SCM팀',
+      });
+    }
+
+    if (S.total >= 3 && parseFloat(S.doneRate) < 40) {
+      items.push({
+        priority: 'supply',
+        title: `시정조치 완료율 저조 — ${S.doneRate}% (목표 80%)`,
+        detail: `공급사 불량 ${S.total}건 중 완료는 ${S.done}건에 불과합니다. 조치 이행을 추적하는 체계가 미흡한 상태입니다.`,
+        action: '미완료 건별 데드라인을 설정하고, 공급사별 이행 현황을 주간 단위로 추적하세요. 기한 내 미이행 시 구매 보류 또는 페널티 적용을 검토하세요.',
+        team: 'SCM팀 · 품질기술팀',
+      });
+    }
+
+    // ─ 모니터링 ─
+    if (C.monthly.length >= 2) {
+      const lastM = C.monthly[C.monthly.length - 1].count;
+      const prevM = C.monthly[C.monthly.length - 2].count;
+      if (prevM > 0 && (lastM - prevM) / prevM >= 0.3) {
+        items.push({
+          priority: 'monitor',
+          title: `최근 클레임 증가 추세 — 전월 대비 +${lastM - prevM}건 (+${Math.round((lastM - prevM) / prevM * 100)}%)`,
+          detail: `전월 ${prevM}건에서 최근 ${lastM}건으로 증가했습니다. 계절적 요인인지 구조적 요인인지 빠른 파악이 필요합니다.`,
+          action: '품질기술팀이 최근 접수 클레임의 고객사·품목·불량 유형 공통점을 분석하고 이번 달 내 원인 보고서를 작성하세요.',
+          team: '품질기술팀',
+        });
+      }
+    }
+
+    if (S.total > 0 && parseFloat(S.defRate) > 1 && parseFloat(S.defRate) <= 3) {
+      items.push({
+        priority: 'monitor',
+        title: `공급사 불량률 허용 범위 내 — ${S.defRate}% (기준 3%)`,
+        detail: `현재는 기준 이하이나, 목표(1%) 대비 여전히 개선 여지가 있습니다. 추세가 반등하면 즉각 대응이 필요합니다.`,
+        action: '현행 수입검사 주기를 유지하면서 분기별 추이를 관찰하세요. 2개월 연속 2% 초과 시 검사 강화 또는 공급사 현장 점검으로 전환하세요.',
+        team: '품질기술팀',
+      });
+    }
+
+    if (C.total > 0 && parseFloat(C.closeRate) >= 70 && S.total > 0 && parseFloat(S.defRate) <= 1 && items.length === 0) {
+      items.push({
+        priority: 'monitor',
+        title: '전반적으로 양호한 품질 수준 유지 중',
+        detail: `클레임 종결률 ${C.closeRate}%, 공급사 불량률 ${S.defRate}%로 두 지표 모두 목표 기준을 충족하고 있습니다.`,
+        action: '현행 관리 수준을 유지하면서, 데이터를 지속 축적하여 분기별 트렌드 변화에 대비하세요.',
+        team: '품질기술팀',
+      });
+    }
+
+    return items;
+  }, [C, S, filteredC, filteredS]);
+
+  const summaryText = useMemo(() => {
+    const parts = [];
+    parts.push(`${start} ~ ${end} 기간 내 고객사 클레임 ${C.total}건, 공급사 불량 ${S.total}건이 접수되었습니다.`);
+    if (C.total > 0) {
+      const rateDesc = parseFloat(C.closeRate) >= 70 ? `목표(70%)를 달성한 양호한 수준(${C.closeRate}%)입니다` : `목표(70%) 대비 ${(70 - parseFloat(C.closeRate)).toFixed(0)}%p 미달(${C.closeRate}%)로 개선이 필요합니다`;
+      parts.push(`클레임 종결률은 ${rateDesc}.`);
+    }
+    if (S.total > 0) {
+      const defDesc = parseFloat(S.defRate) <= 1 ? `우수한 수준(${S.defRate}%)입니다` : parseFloat(S.defRate) <= 3 ? `허용 범위 내(${S.defRate}%)이나 지속 모니터링이 필요합니다` : `허용 기준(3%)을 초과(${S.defRate}%)하여 즉각적인 개선이 필요합니다`;
+      parts.push(`공급사 전체 불량률은 ${defDesc}.`);
+    }
+    const urgentCnt = actionInsights.filter(i => i.priority === 'urgent').length;
+    if (urgentCnt > 0) parts.push(`즉각적인 조치가 필요한 사항 ${urgentCnt}건이 발견되었습니다.`);
+    return parts.join(' ');
+  }, [C, S, start, end, actionInsights]);
+
+  // ── 월별 통합 ─────────────────────────────────────────────────
+  const trend = useMemo(() => {
+    const allM = new Set([...C.monthly.map(d => d.month), ...S.monthly.map(d => d.month)]);
+    return [...allM].sort().map(m => ({
+      month: m,
+      고객사클레임: C.monthly.find(d => d.month === m)?.count || 0,
+      공급사불량:   S.monthly.find(d => d.month === m)?.count || 0,
+    }));
+  }, [C, S]);
+
+  const total = filteredC.length + filteredS.length;
 
   const generate = () => {
-    if (total === 0) { setError('선택한 기간에 데이터가 없습니다.'); return; }
-    setGenerating(true);
-    setError('');
-    setReport('');
+    if (!total) return;
     setPrintTitle(`AJW 클레임 종합 분석 보고서 (${start} ~ ${end})`);
-    setTimeout(() => {
-      try {
-        const text = generateLocalReport(filteredC, filteredS, start, end, stages);
-        setReport(text);
-      } catch (err) {
-        setError(`생성 실패: ${err.message}`);
-      } finally {
-        setGenerating(false);
-      }
-    }, 200);
+    setShown(true);
   };
+
+  const presets = [
+    ['이번 달',    () => { const n=new Date(); setStart(n.toISOString().slice(0,8)+'01'); setEnd(n.toISOString().slice(0,10)); setShown(false); }],
+    ['최근 3개월', () => { const n=new Date(),s=new Date(n); s.setMonth(s.getMonth()-3); setStart(s.toISOString().slice(0,10)); setEnd(n.toISOString().slice(0,10)); setShown(false); }],
+    ['올해',       () => { const y=new Date().getFullYear(); setStart(`${y}-01-01`); setEnd(new Date().toISOString().slice(0,10)); setShown(false); }],
+  ];
 
   return (
     <div>
+      {/* 헤더 */}
       {!embedded && (
         <div className="page-header">
           <div>
             <div className="page-title">📊 클레임 종합 분석 보고서</div>
-            <div className="page-sub">기간을 선택하면 고객사 클레임 + 공급사 불량을 종합 분석합니다</div>
+            <div className="page-sub">기간을 선택하면 고객사 클레임 + 공급사 불량을 시각화·분석합니다</div>
           </div>
-          {report && (
-            <button className="btn btn-ghost btn-sm no-print" onClick={() => window.print()}>🖨️ 인쇄/PDF</button>
-          )}
+          {shown && <button className="btn btn-ghost btn-sm no-print" onClick={() => window.print()}>🖨️ 인쇄/PDF</button>}
         </div>
       )}
 
-      {/* 기간 선택 + 생성 버튼 */}
+      {/* 모드 탭 */}
+      <div style={{ display: 'flex', gap: 4, marginBottom: 16 }}>
+        {[['period','📅 기간 분석'],['year','📊 연도별 비교']].map(([v, label]) => (
+          <button key={v} onClick={() => setMode(v)} style={{
+            padding: '8px 20px', borderRadius: 8, fontSize: 13, fontWeight: 600,
+            cursor: 'pointer', border: '1.5px solid', fontFamily: 'inherit',
+            background: mode === v ? '#0f172a' : '#fff',
+            color: mode === v ? '#fff' : '#64748b',
+            borderColor: mode === v ? '#0f172a' : '#e2e8f0',
+          }}>{label}</button>
+        ))}
+      </div>
+
+      {/* 연도별 비교 모드 */}
+      {mode === 'year' && (
+        <YearCompareReport claims={claims} supplierClaims={supplierClaims} stages={stages} />
+      )}
+
+      {/* 기간 분석 모드 */}
+      {mode === 'period' && (<>
       <div className="card" style={{ marginBottom: 16 }}>
         <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'flex-end' }}>
           <div>
             <div style={{ fontSize: 11, color: '#94a3b8', fontWeight: 600, marginBottom: 4 }}>시작일</div>
-            <input type="date" value={start} onChange={e => setStart(e.target.value)}
+            <input type="date" value={start} onChange={e => { setStart(e.target.value); setShown(false); }}
               style={{ padding: '8px 10px', border: '1px solid #e2e8f0', borderRadius: 8, fontSize: 13 }} />
           </div>
           <div style={{ fontSize: 18, color: '#cbd5e1', paddingBottom: 8 }}>—</div>
           <div>
             <div style={{ fontSize: 11, color: '#94a3b8', fontWeight: 600, marginBottom: 4 }}>종료일</div>
-            <input type="date" value={end} onChange={e => setEnd(e.target.value)}
+            <input type="date" value={end} onChange={e => { setEnd(e.target.value); setShown(false); }}
               style={{ padding: '8px 10px', border: '1px solid #e2e8f0', borderRadius: 8, fontSize: 13 }} />
           </div>
-          <div style={{ display: 'flex', gap: 8 }}>
-            {[
-              ['이번 달', () => { const n=new Date(); setStart(n.toISOString().slice(0,8)+'01'); setEnd(n.toISOString().slice(0,10)); }],
-              ['최근 3개월', () => { const n=new Date(); const s=new Date(n); s.setMonth(s.getMonth()-3); setStart(s.toISOString().slice(0,10)); setEnd(n.toISOString().slice(0,10)); }],
-              ['올해', () => { const y=new Date().getFullYear(); setStart(`${y}-01-01`); setEnd(new Date().toISOString().slice(0,10)); }],
-            ].map(([label, fn]) => (
+          <div style={{ display: 'flex', gap: 6 }}>
+            {presets.map(([label, fn]) => (
               <button key={label} className="btn btn-ghost btn-sm" onClick={fn} style={{ fontSize: 12 }}>{label}</button>
             ))}
           </div>
-          <button
-            className="btn btn-primary"
-            onClick={generate}
-            disabled={generating}
-            style={{ marginLeft: 'auto', minWidth: 140 }}
-          >
-            {generating ? '⏳ 생성 중...' : '📊 보고서 생성'}
+          <button className="btn btn-primary" onClick={generate} disabled={!total} style={{ marginLeft: 'auto', minWidth: 140 }}>
+            📊 보고서 생성
           </button>
         </div>
-
-        {/* 데이터 미리보기 */}
-        {(filteredC.length > 0 || filteredS.length > 0) && (
-          <div style={{ display: 'flex', gap: 10, marginTop: 12, flexWrap: 'wrap' }}>
-            <div style={{ padding: '6px 14px', background: '#eff6ff', borderRadius: 8, fontSize: 12, color: '#1d4ed8', fontWeight: 600 }}>
-              고객사 클레임 {filteredC.length}건
-            </div>
-            <div style={{ padding: '6px 14px', background: '#f0fdf4', borderRadius: 8, fontSize: 12, color: '#065f46', fontWeight: 600 }}>
-              공급사 불량 {filteredS.length}건
-            </div>
+        {total > 0 && (
+          <div style={{ display: 'flex', gap: 10, marginTop: 12 }}>
+            <span style={{ padding: '4px 12px', background: '#eff6ff', borderRadius: 8, fontSize: 12, color: '#1d4ed8', fontWeight: 600 }}>고객사 클레임 {filteredC.length}건</span>
+            <span style={{ padding: '4px 12px', background: '#fffbeb', borderRadius: 8, fontSize: 12, color: '#92400e', fontWeight: 600 }}>공급사 불량 {filteredS.length}건</span>
           </div>
         )}
       </div>
 
-      {/* ── 데이터 요약 (항상 표시) ── */}
-      {total > 0 && (
-        <div style={{ marginBottom: 16 }}>
-          {/* KPI 행 */}
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 10, marginBottom: 12 }}>
-            {[
-              { label: '고객사 클레임', value: filteredC.length + '건', sub: `미결 ${stats.cPending}건`, color: '#3b82f6' },
-              { label: '클레임 종결률', value: filteredC.length > 0 ? ((stats.cClosed / filteredC.length) * 100).toFixed(0) + '%' : '-', sub: `종결 ${stats.cClosed}건`, color: '#10b981' },
-              { label: '공급사 불량',  value: filteredS.length + '건', sub: `미결 ${stats.sPending}건`, color: '#f59e0b' },
-              { label: '전체 불량률',  value: stats.defRate != null ? stats.defRate + '%' : '-', sub: `${stats.totalDef.toLocaleString()} / ${stats.totalIn.toLocaleString()} EA`, color: stats.defRate > 5 ? '#dc2626' : '#059669' },
-            ].map(item => (
-              <div key={item.label} className="card" style={{ textAlign: 'center', padding: '14px 12px' }}>
-                <div style={{ fontSize: 11, color: '#64748b', marginBottom: 4 }}>{item.label}</div>
-                <div style={{ fontSize: 24, fontWeight: 800, color: item.color }}>{item.value}</div>
-                <div style={{ fontSize: 11, color: '#94a3b8', marginTop: 2 }}>{item.sub}</div>
+      {!total && (
+        <div className="empty"><div className="empty-icon">📊</div>선택한 기간({start} ~ {end})에 데이터가 없습니다</div>
+      )}
+
+      {shown && total > 0 && (
+        <>
+          {/* KPI 타일 */}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 12, marginBottom: 16 }}>
+            <KpiTile label="고객사 클레임" value={`${C.total}건`} sub={`미결 ${C.pending}건`} color={BLUE} bg="#eff6ff" border="#bfdbfe" />
+            <KpiTile
+              label="클레임 종결률" value={`${C.closeRate}%`} sub={`종결 ${C.closed}건`}
+              color={parseFloat(C.closeRate)>=70?GREEN:parseFloat(C.closeRate)>=50?AMBER:RED}
+              bg={parseFloat(C.closeRate)>=70?'#f0fdf4':parseFloat(C.closeRate)>=50?'#fffbeb':'#fef2f2'}
+              border={parseFloat(C.closeRate)>=70?'#bbf7d0':parseFloat(C.closeRate)>=50?'#fde68a':'#fecaca'}
+            />
+            <KpiTile label="공급사 불량" value={`${S.total}건`}
+              sub={`불량 ${S.totalDef.toLocaleString()} / 입고 ${S.totalIn.toLocaleString()} EA`}
+              color={AMBER} bg="#fffbeb" border="#fde68a" />
+            <KpiTile
+              label="전체 불량률" value={`${S.defRate}%`} sub="입고 대비 불량 수량"
+              color={statusColor(S.defRate)} bg={statusBg(S.defRate)} border={statusBorder(S.defRate)}
+            />
+          </div>
+
+          {/* 월별 추이 */}
+          {trend.length > 1 && (
+            <div className="card" style={{ marginBottom: 16, padding: '20px 24px' }}>
+              <SectionTitle icon="📈" title="월별 접수 추이" />
+              <ResponsiveContainer width="100%" height={180}>
+                <BarChart data={trend} margin={{ top: 4, right: 16, left: -20, bottom: 0 }}>
+                  <XAxis dataKey="month" tick={{ fontSize: 11, fill: '#64748b' }} axisLine={false} tickLine={false} />
+                  <YAxis tick={{ fontSize: 11, fill: '#64748b' }} axisLine={false} tickLine={false} allowDecimals={false} />
+                  <Tooltip content={<ChartTip />} />
+                  <Bar dataKey="고객사클레임" fill={BLUE}  radius={[4,4,0,0]} maxBarSize={28} />
+                  <Bar dataKey="공급사불량"   fill={AMBER} radius={[4,4,0,0]} maxBarSize={28} />
+                </BarChart>
+              </ResponsiveContainer>
+              <div style={{ display: 'flex', gap: 16, marginTop: 8, justifyContent: 'center' }}>
+                {[[BLUE,'고객사 클레임'],[AMBER,'공급사 불량']].map(([color,label])=>(
+                  <span key={label} style={{ fontSize:11,color:'#64748b',display:'flex',alignItems:'center',gap:4 }}>
+                    <span style={{ width:10,height:10,borderRadius:2,background:color,display:'inline-block' }}/>
+                    {label}
+                  </span>
+                ))}
               </div>
-            ))}
-          </div>
-
-          {/* 상세 분석 그리드 */}
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
-            {/* 고객사 클레임 TOP */}
-            <div className="card" style={{ padding: '14px 16px' }}>
-              <div style={{ fontSize: 12, fontWeight: 700, color: '#1d4ed8', marginBottom: 10 }}>📋 주요 고객사 (클레임 건수)</div>
-              {stats.topCustomers.length === 0
-                ? <div style={{ fontSize: 12, color: '#94a3b8' }}>데이터 없음</div>
-                : stats.topCustomers.map(([name, cnt], i) => {
-                    const pct = filteredC.length > 0 ? Math.round(cnt / filteredC.length * 100) : 0;
-                    return (
-                      <div key={name} style={{ marginBottom: 6 }}>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, marginBottom: 2 }}>
-                          <span style={{ fontWeight: i === 0 ? 700 : 400, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '65%' }}>{name}</span>
-                          <span style={{ color: '#64748b', flexShrink: 0 }}>{cnt}건 ({pct}%)</span>
-                        </div>
-                        <div style={{ background: '#f1f5f9', borderRadius: 3, height: 5 }}>
-                          <div style={{ background: '#3b82f6', width: `${pct}%`, height: '100%', borderRadius: 3 }} />
-                        </div>
-                      </div>
-                    );
-                  })}
             </div>
+          )}
 
-            {/* 공급사 불량 TOP */}
-            <div className="card" style={{ padding: '14px 16px' }}>
-              <div style={{ fontSize: 12, fontWeight: 700, color: '#92400e', marginBottom: 10 }}>🏭 주요 공급사 (불량 건수)</div>
-              {stats.topSuppliers.length === 0
-                ? <div style={{ fontSize: 12, color: '#94a3b8' }}>데이터 없음</div>
-                : stats.topSuppliers.map(([name, cnt], i) => {
-                    const pct = filteredS.length > 0 ? Math.round(cnt / filteredS.length * 100) : 0;
-                    return (
-                      <div key={name} style={{ marginBottom: 6 }}>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, marginBottom: 2 }}>
-                          <span style={{ fontWeight: i === 0 ? 700 : 400, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '65%' }}>{name}</span>
-                          <span style={{ color: '#64748b', flexShrink: 0 }}>{cnt}건 ({pct}%)</span>
-                        </div>
-                        <div style={{ background: '#f1f5f9', borderRadius: 3, height: 5 }}>
-                          <div style={{ background: '#f59e0b', width: `${pct}%`, height: '100%', borderRadius: 3 }} />
-                        </div>
-                      </div>
-                    );
-                  })}
-            </div>
+          {/* 고객사 클레임 분석 */}
+          {C.total > 0 && (
+            <div className="card" style={{ marginBottom: 16, padding: '20px 24px' }}>
+              <SectionTitle icon="🏢" title="고객사 클레임 분석" color="#1d4ed8" />
 
-            {/* 클레임 불량유형 TOP */}
-            <div className="card" style={{ padding: '14px 16px' }}>
-              <div style={{ fontSize: 12, fontWeight: 700, color: '#5b21b6', marginBottom: 10 }}>⚠️ 고객사 클레임 불량유형</div>
-              {stats.topCDefects.length === 0
-                ? <div style={{ fontSize: 12, color: '#94a3b8' }}>데이터 없음</div>
-                : <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-                    {stats.topCDefects.map(([name, cnt]) => (
-                      <span key={name} style={{ fontSize: 11, padding: '3px 10px', borderRadius: 99, background: '#f3e8ff', color: '#6b21a8', fontWeight: 600 }}>
-                        {name} {cnt}건
-                      </span>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 28, marginBottom: 24 }}>
+                {/* 단계별 분포 */}
+                <div>
+                  <SubTitle>단계별 현황</SubTitle>
+                  <ResponsiveContainer width="100%" height={Math.max(C.byStage.length * 38, 80)}>
+                    <BarChart data={C.byStage} layout="vertical" margin={{ top: 0, right: 48, left: 0, bottom: 0 }}>
+                      <XAxis type="number" tick={{ fontSize: 10, fill: '#94a3b8' }} axisLine={false} tickLine={false} allowDecimals={false} />
+                      <YAxis type="category" dataKey="name" tick={{ fontSize: 11, fill: '#374151' }} axisLine={false} tickLine={false} width={90} />
+                      <Tooltip formatter={v => [`${v}건`]} contentStyle={{ fontSize: 12, borderRadius: 8 }} />
+                      <Bar dataKey="count" fill={BLUE} radius={[0,4,4,0]} maxBarSize={18}
+                        label={{ position:'right', fontSize:11, fill:'#64748b', formatter: v => v+'건' }} />
+                    </BarChart>
+                  </ResponsiveContainer>
+                  <div style={{ marginTop: 12, padding: '10px 14px', background: '#f8fafc', borderRadius: 8, fontSize: 12, color: '#475569', lineHeight: 1.6 }}>
+                    {C.pending > 0
+                      ? `현재 미결 <strong style="color:#dc2626">${C.pending}건</strong>이 처리 중입니다. 종결률은 <strong>${C.closeRate}%</strong>로, ${parseFloat(C.closeRate) >= 70 ? '양호한 수준입니다.' : '목표(70%) 대비 개선이 필요합니다.'}`
+                      : `선택 기간 내 모든 클레임이 종결 처리되었습니다. (종결률 100%)`
+                    }
+                  </div>
+                </div>
+
+                {/* 주요 고객사 */}
+                <div>
+                  <SubTitle>주요 고객사 TOP 5</SubTitle>
+                  {C.topCustomers.map(([name, count], i) => (
+                    <HBar key={name} name={name} count={count} total={C.total} color={BLUE} rank={i + 1} />
+                  ))}
+                  {C.topCustomers.length > 0 && (
+                    <div style={{ marginTop: 10, padding: '10px 14px', background: '#f8fafc', borderRadius: 8, fontSize: 12, color: '#475569', lineHeight: 1.6 }}>
+                      1위 <strong>{C.topCustomers[0][0]}</strong>가 전체의 <strong>{(C.topCustomers[0][1]/C.total*100).toFixed(0)}%</strong>를 차지합니다.
+                      {C.topCustomers[0][1]/C.total >= 0.3 && ' 특정 고객사 집중도가 높아 리스크 관리가 필요합니다.'}
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 28 }}>
+                {/* 불량 유형 */}
+                {C.topDefects.length > 0 && (
+                  <div>
+                    <SubTitle>불량 유형별</SubTitle>
+                    {C.topDefects.map(([name, count], i) => (
+                      <HBar key={name} name={name} count={count} total={C.total} color={PURPLE} rank={i + 1} />
                     ))}
-                  </div>}
-            </div>
+                  </div>
+                )}
 
-            {/* 공급사 처리결과 */}
-            <div className="card" style={{ padding: '14px 16px' }}>
-              <div style={{ fontSize: 12, fontWeight: 700, color: '#065f46', marginBottom: 10 }}>✅ 공급사 불량 처리결과</div>
-              {stats.dispositions.length === 0
-                ? <div style={{ fontSize: 12, color: '#94a3b8' }}>데이터 없음</div>
-                : <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-                    {stats.dispositions.map(([name, cnt]) => {
-                      const dc = DISPOSITION_COLORS[name] || DISPOSITION_COLORS['미결'];
-                      return (
-                        <span key={name} style={{ fontSize: 11, padding: '3px 10px', borderRadius: 99, background: dc.bg, color: dc.text, fontWeight: 600 }}>
-                          {name} {cnt}건
-                        </span>
-                      );
-                    })}
-                  </div>}
+                {/* 원인 분석 */}
+                {C.byCause.length > 0 ? (
+                  <div>
+                    <SubTitle>원인 분석 결과 (회수품 분석 기준)</SubTitle>
+                    <ResponsiveContainer width="100%" height={Math.max(C.byCause.length * 36, 60)}>
+                      <BarChart data={C.byCause.map(([name,count])=>({name,count}))} layout="vertical"
+                        margin={{ top:0, right:48, left:0, bottom:0 }}>
+                        <XAxis type="number" tick={{ fontSize:10, fill:'#94a3b8' }} axisLine={false} tickLine={false} allowDecimals={false} />
+                        <YAxis type="category" dataKey="name" tick={{ fontSize:11, fill:'#374151' }} axisLine={false} tickLine={false} width={110} />
+                        <Tooltip formatter={v=>[`${v}건`]} contentStyle={{ fontSize:12, borderRadius:8 }} />
+                        <Bar dataKey="count" fill={PURPLE} radius={[0,4,4,0]} maxBarSize={18}
+                          label={{ position:'right', fontSize:11, fill:'#64748b', formatter: v=>v+'건' }} />
+                      </BarChart>
+                    </ResponsiveContainer>
+                    <div style={{ marginTop:10, padding:'10px 14px', background:'#faf5ff', borderRadius:8, fontSize:12, color:'#475569', lineHeight:1.6 }}>
+                      가장 빈번한 원인은 <strong style={{ color:'#7c3aed' }}>{C.byCause[0][0]}</strong> ({C.byCause[0][1]}건)입니다.
+                      {C.byCause[0][1] >= 2 && ' 반복 발생 원인으로, 재발방지 대책의 실효성 점검이 필요합니다.'}
+                    </div>
+                  </div>
+                ) : (
+                  <div>
+                    <SubTitle>원인 분석 결과</SubTitle>
+                    <div style={{ fontSize:12, color:'#94a3b8', padding:'16px 0' }}>회수품 원인분석 단계 데이터 없음</div>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* 공급사 불량 분석 */}
+          {S.total > 0 && (
+            <div className="card" style={{ marginBottom: 16, padding: '20px 24px' }}>
+              <SectionTitle icon="🏭" title="공급사 불량 분석" color="#92400e" />
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 28, marginBottom: 24 }}>
+                {/* 시정조치 현황 도넛 */}
+                <div>
+                  <SubTitle>시정조치 현황</SubTitle>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 24 }}>
+                    <PieChart width={130} height={130}>
+                      <Pie data={S.donut} cx={60} cy={60} innerRadius={38} outerRadius={58}
+                        dataKey="value" startAngle={90} endAngle={-270} paddingAngle={2}>
+                        {S.donut.map((d, i) => <Cell key={i} fill={d.color} stroke="none" />)}
+                      </Pie>
+                      <Tooltip formatter={(v, name) => [`${v}건`, name]} contentStyle={{ fontSize:12, borderRadius:8 }} />
+                    </PieChart>
+                    <div>
+                      {S.donut.map(d => (
+                        <div key={d.name} style={{ display:'flex', alignItems:'center', gap:6, marginBottom:8 }}>
+                          <span style={{ width:10, height:10, borderRadius:2, background:d.color, display:'inline-block', flexShrink:0 }}/>
+                          <span style={{ fontSize:13, color:'#374151' }}>{d.name}</span>
+                          <span style={{ fontSize:13, fontWeight:700, color:'#1e293b', marginLeft:4 }}>{d.value}건</span>
+                        </div>
+                      ))}
+                      <div style={{ fontSize:12, color:'#94a3b8', marginTop:4, borderTop:'1px solid #f1f5f9', paddingTop:8 }}>
+                        완료율 <strong style={{ color:parseFloat(S.doneRate)>=70?GREEN:parseFloat(S.doneRate)>=40?AMBER:RED }}>{S.doneRate}%</strong>
+                      </div>
+                    </div>
+                  </div>
+                  <div style={{ marginTop:12, padding:'10px 14px', background:'#fffbeb', borderRadius:8, fontSize:12, color:'#475569', lineHeight:1.6 }}>
+                    전체 {S.total}건 중 시정조치 완료 <strong>{S.done}건</strong>,
+                    미조치 <strong style={{ color:S.noAction>=3?RED:'inherit' }}>{S.noAction}건</strong>.
+                    {S.noAction >= 3 && ' 즉시 조치 담당자 지정이 필요합니다.'}
+                  </div>
+                </div>
+
+                {/* 주요 공급사 */}
+                <div>
+                  <SubTitle>주요 공급사 TOP 5 (건수 / 불량률)</SubTitle>
+                  {S.topSuppliers.map((s, i) => (
+                    <div key={s.name} style={{ marginBottom: 10 }}>
+                      <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:3 }}>
+                        <div style={{ display:'flex', alignItems:'center', gap:6 }}>
+                          <span style={{ fontSize:10, fontWeight:700, color:i===0?AMBER:'#94a3b8', width:14, textAlign:'center' }}>{i+1}</span>
+                          <span style={{ fontSize:12, fontWeight:i===0?700:400, color:'#1e293b', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', maxWidth:150 }}>{s.name}</span>
+                        </div>
+                        <div style={{ fontSize:11, color:'#64748b', flexShrink:0, marginLeft:8, textAlign:'right' }}>
+                          {s.count}건
+                          {parseFloat(s.rate) > 0 && (
+                            <span style={{ marginLeft:4, color:parseFloat(s.rate)>5?RED:parseFloat(s.rate)>3?AMBER:'#64748b', fontWeight:600 }}>
+                              ({s.rate}%)
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                      <div style={{ background:'#f1f5f9', borderRadius:4, height:7, overflow:'hidden' }}>
+                        <div style={{
+                          background: parseFloat(s.rate)>5?RED:parseFloat(s.rate)>3?AMBER:AMBER,
+                          width:`${S.total>0?Math.round(s.count/S.total*100):0}%`,
+                          height:'100%', borderRadius:4,
+                        }}/>
+                      </div>
+                    </div>
+                  ))}
+                  {S.topSuppliers.length > 0 && (
+                    <div style={{ marginTop:10, padding:'10px 14px', background:'#fffbeb', borderRadius:8, fontSize:12, color:'#475569', lineHeight:1.6 }}>
+                      불량률 3% 초과 공급사:&nbsp;
+                      <strong style={{ color:RED }}>
+                        {S.topSuppliers.filter(s=>parseFloat(s.rate)>3).map(s=>s.name).join(', ') || '없음'}
+                      </strong>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 28 }}>
+                {S.topDefects.length > 0 && (
+                  <div>
+                    <SubTitle>불량 유형별</SubTitle>
+                    {S.topDefects.map(([name, count], i) => (
+                      <HBar key={name} name={name} count={count} total={S.total} color={AMBER} rank={i+1} />
+                    ))}
+                  </div>
+                )}
+                {S.byStage.length > 0 && (
+                  <div>
+                    <SubTitle>검사 단계별</SubTitle>
+                    {S.byStage.map(([name, count], i) => (
+                      <HBar key={name} name={name} count={count} total={S.total} color={PURPLE} rank={i+1} />
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* 종합 인사이트 & Action Required */}
+          <div className="card" style={{ marginBottom: 16, padding: '20px 24px' }}>
+            <SectionTitle icon="🎯" title="종합 인사이트 & Action Required" />
+
+            {/* 현황 요약 내러티브 */}
+            {summaryText && (
+              <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 10, padding: '14px 18px', marginBottom: 18, fontSize: 13, lineHeight: 1.75, color: '#334155' }}>
+                {summaryText}
+              </div>
+            )}
+
+            {/* 우선순위 배지 행 */}
+            {actionInsights.length > 0 && (
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 20 }}>
+                {PRIORITY_CONFIG.map(pc => {
+                  const cnt = actionInsights.filter(i => i.priority === pc.key).length;
+                  if (!cnt) return null;
+                  return (
+                    <span key={pc.key} style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '4px 12px', borderRadius: 20, background: pc.bg, border: `1px solid ${pc.border}`, fontSize: 12, fontWeight: 700, color: pc.color }}>
+                      {pc.icon} {pc.label} <span style={{ background: pc.color, color: '#fff', borderRadius: 10, padding: '0 6px', fontSize: 11 }}>{cnt}</span>
+                    </span>
+                  );
+                })}
+              </div>
+            )}
+
+            {/* Action Required 카드 목록 */}
+            {actionInsights.length === 0 ? (
+              <div style={{ color: '#94a3b8', fontSize: 13, textAlign: 'center', padding: '24px 0' }}>
+                분석 기간 내 특별한 조치 사항이 발견되지 않았습니다.
+              </div>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                {PRIORITY_CONFIG.map(pc =>
+                  actionInsights.filter(i => i.priority === pc.key).map((item, idx) => (
+                    <div key={`${pc.key}-${idx}`} style={{ border: `1.5px solid ${pc.border}`, borderLeft: `4px solid ${pc.color}`, borderRadius: 10, padding: '14px 18px', background: pc.bg }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+                        <span style={{ fontSize: 16 }}>{pc.icon}</span>
+                        <span style={{ fontSize: 11, fontWeight: 700, color: pc.color, background: '#fff', border: `1px solid ${pc.border}`, borderRadius: 6, padding: '2px 8px' }}>{pc.label}</span>
+                        <span style={{ fontSize: 13, fontWeight: 700, color: '#1e293b' }}>{item.title}</span>
+                      </div>
+                      <div style={{ fontSize: 12.5, color: '#475569', marginBottom: 10, lineHeight: 1.6 }}>{item.detail}</div>
+                      <div style={{ background: '#fff', border: `1px solid ${pc.border}`, borderRadius: 7, padding: '9px 13px' }}>
+                        <div style={{ fontSize: 11, fontWeight: 700, color: pc.color, marginBottom: 4 }}>권고 조치</div>
+                        <div style={{ fontSize: 12, color: '#334155', lineHeight: 1.6 }}>{item.action}</div>
+                        <div style={{ marginTop: 6, fontSize: 11, color: '#94a3b8' }}>담당: <strong style={{ color: '#64748b' }}>{item.team}</strong></div>
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+            )}
+
+            <div style={{ marginTop: 20, paddingTop: 14, borderTop: '1px solid #e2e8f0', fontSize: 11, color: '#cbd5e1', display: 'flex', justifyContent: 'space-between' }}>
+              <span>분석 기간: {start} ~ {end} · 고객사 {filteredC.length}건 + 공급사 {filteredS.length}건</span>
+              <span>자동 생성 보고서 · AJW 클레임 트래커</span>
             </div>
           </div>
+        </>
+      )}
+      </>)} {/* end period mode */}
+    </div>
+  );
+}
+
+/* ════════════════════════════════════════════════════════════
+   연도별 비교 컴포넌트 (AI 종합보고 전용)
+═══════════════════════════════════════════════════════════════ */
+function YearCompareReport({ claims, supplierClaims, stages }) {
+  const [range, setRange] = useState(3);
+
+  const allYears = useMemo(() => {
+    const sc = new Set([
+      ...claims.map(c => (c.receipt_date || c.created_at || '').slice(0, 4)),
+      ...supplierClaims.map(c => (c.incoming_date || c.created_at || '').slice(0, 4)),
+    ]);
+    return [...sc].filter(y => y >= '2020').sort();
+  }, [claims, supplierClaims]);
+
+  const displayYears = useMemo(() =>
+    range ? allYears.slice(-range) : allYears,
+  [allYears, range]);
+
+  const causeMap = useMemo(() => {
+    const m = {};
+    (stages || []).forEach(s => {
+      if (!s.description?.includes('[원인]')) return;
+      const match = s.description.match(/\[원인\]\s*([^\n]+)/);
+      if (!match) return;
+      match[1].split(',').map(x => x.trim()).forEach(k => {
+        if (!m[s.claim_id]) m[s.claim_id] = [];
+        m[s.claim_id].push(k);
+      });
+    });
+    return m;
+  }, [stages]);
+
+  const yearStats = useMemo(() => displayYears.map(year => {
+    const yC = claims.filter(c => (c.receipt_date || c.created_at || '').startsWith(year));
+    const yS = supplierClaims.filter(c => (c.incoming_date || c.created_at || '').startsWith(year));
+
+    const cTotal    = yC.length;
+    const cClosed   = yC.filter(c => c.current_stage === '종결').length;
+    const closeRate = cTotal ? Math.round(cClosed / cTotal * 100) : 0;
+
+    const sTotal   = yS.length;
+    const totalIn  = yS.reduce((s, c) => s + (c.quantity || 0), 0);
+    const totalDef = yS.reduce((s, c) => s + (c.defect_quantity || 0), 0);
+    const defRate  = totalIn > 0 ? +(totalDef / totalIn * 100).toFixed(2) : 0;
+
+    const custMap = {};
+    yC.forEach(c => { const k = c.customer_name||'(미분류)'; custMap[k]=(custMap[k]||0)+1; });
+    const topCustomer = Object.entries(custMap).sort(([,a],[,b])=>b-a)[0];
+
+    const supMap = {};
+    yS.forEach(c => { const k = c.supplier_name||'(미분류)'; supMap[k]=(supMap[k]||0)+1; });
+    const topSupplier = Object.entries(supMap).sort(([,a],[,b])=>b-a)[0];
+
+    const cCauseMap = {};
+    yC.forEach(c => {
+      (causeMap[c.id]||[]).forEach(k => { cCauseMap[k]=(cCauseMap[k]||0)+1; });
+    });
+    const topCause = Object.entries(cCauseMap).sort(([,a],[,b])=>b-a)[0];
+
+    const sNoAction = yS.filter(c => !c.improvement_status || c.improvement_status==='미조치').length;
+    const sDone     = yS.filter(c => c.improvement_status==='완료').length;
+    const sDoneRate = sTotal ? Math.round(sDone/sTotal*100) : 0;
+
+    return { year, cTotal, cClosed, closeRate, sTotal, totalIn, totalDef, defRate, sNoAction, sDone, sDoneRate, topCustomer, topSupplier, topCause };
+  }), [displayYears, claims, supplierClaims, causeMap]);
+
+  const BAR_C = ['#3b82f6','#10b981','#f59e0b','#8b5cf6','#06b6d4'];
+
+  const DeltaBadge = ({ curr, prev, key, unit='건', inverse=false }) => {
+    if (!prev) return <span style={{ color:'#94a3b8', fontSize:11 }}>—</span>;
+    const d = curr[key] - prev[key];
+    const isGood = inverse ? d <= 0 : d >= 0;
+    const color = d === 0 ? '#94a3b8' : isGood ? '#10b981' : '#ef4444';
+    return (
+      <span style={{ fontSize:11, color, fontWeight:600 }}>
+        {d > 0 ? '▲' : d < 0 ? '▼' : '±'} {Math.abs(d)}{unit}
+      </span>
+    );
+  };
+
+  const btnStyle = (active) => ({
+    padding: '6px 16px', borderRadius: 8, fontSize: 12, fontWeight: 600,
+    cursor: 'pointer', border: '1.5px solid', fontFamily: 'inherit',
+    background: active ? '#0f172a' : '#fff',
+    color: active ? '#fff' : '#64748b',
+    borderColor: active ? '#0f172a' : '#e2e8f0',
+  });
+
+  if (allYears.length === 0) return (
+    <div className="empty"><div className="empty-icon">📊</div>연도별 비교를 위한 데이터가 없습니다</div>
+  );
+
+  return (
+    <div style={{ display:'flex', flexDirection:'column', gap:16 }}>
+
+      {/* 범위 */}
+      <div className="card" style={{ padding:'14px 18px' }}>
+        <div style={{ display:'flex', gap:8, alignItems:'center', flexWrap:'wrap' }}>
+          <span style={{ fontSize:12, color:'#64748b', fontWeight:600 }}>비교 범위</span>
+          {[[3,'최근 3년'],[5,'최근 5년'],[0,'전체']].map(([v,label]) => (
+            <button key={v} onClick={() => setRange(v)} style={btnStyle(range===v)}>{label}</button>
+          ))}
+          <span style={{ fontSize:12, color:'#94a3b8', marginLeft:4 }}>
+            {displayYears[0]} ~ {displayYears[displayYears.length-1]}년 ({displayYears.length}개년)
+          </span>
         </div>
-      )}
+      </div>
 
-      {/* 에러 */}
-      {error && (
-        <div className="error-box" style={{ marginBottom: 16 }}>{error}</div>
-      )}
-
-      {/* 생성 중 */}
-      {generating && (
-        <div className="card" style={{ textAlign: 'center', padding: '48px 24px', marginBottom: 16 }}>
-          <div style={{ fontSize: 40, marginBottom: 16 }}>📊</div>
-          <div style={{ fontSize: 15, fontWeight: 700, color: '#0f172a', marginBottom: 8 }}>데이터를 분석하고 있습니다</div>
-          <div style={{ fontSize: 13, color: '#94a3b8' }}>고객사 클레임 {filteredC.length}건 + 공급사 불량 {filteredS.length}건 종합 분석 중...</div>
+      {/* 고객사 클레임 건수 + 공급사 불량 건수 */}
+      <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:12 }}>
+        <div className="card" style={{ padding:'18px 20px' }}>
+          <SectionTitle icon="🏢" title="연도별 고객사 클레임" color="#1d4ed8" />
+          <ResponsiveContainer width="100%" height={200}>
+            <BarChart data={yearStats} margin={{ top:4, right:20, left:-8, bottom:0 }}>
+              <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
+              <XAxis dataKey="year" tickFormatter={y=>y+'년'} tick={{ fontSize:11 }} />
+              <YAxis tick={{ fontSize:11 }} allowDecimals={false} />
+              <Tooltip formatter={v=>[v+'건','클레임']} labelFormatter={l=>l+'년'} />
+              <Bar dataKey="cTotal" name="클레임" radius={[6,6,0,0]} maxBarSize={56}
+                label={{ position:'top', fontSize:12, fontWeight:700, formatter:v=>v+'건' }}>
+                {yearStats.map((_,i)=><Cell key={i} fill={BAR_C[i%BAR_C.length]}/>)}
+              </Bar>
+            </BarChart>
+          </ResponsiveContainer>
         </div>
-      )}
 
-      {/* 보고서 */}
-      {report && !generating && (
-        <div className="card" style={{ padding: '32px 36px' }}>
-          <div
-            dangerouslySetInnerHTML={{ __html: mdToHtml(report) }}
-            style={{ lineHeight: 1.7, fontFamily: "'Helvetica Neue',Arial,sans-serif" }}
-          />
-          <div style={{ marginTop: 32, paddingTop: 16, borderTop: '1px solid #e2e8f0', fontSize: 11, color: '#cbd5e1', display: 'flex', justifyContent: 'space-between' }}>
-            <span>분석 기간: {start} ~ {end} · 고객사 {filteredC.length}건 + 공급사 {filteredS.length}건</span>
-            <span>자동 생성 보고서 · AJW 클레임 트래커</span>
+        <div className="card" style={{ padding:'18px 20px' }}>
+          <SectionTitle icon="🏭" title="연도별 공급사 불량" color="#92400e" />
+          <ResponsiveContainer width="100%" height={200}>
+            <BarChart data={yearStats} margin={{ top:4, right:20, left:-8, bottom:0 }}>
+              <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
+              <XAxis dataKey="year" tickFormatter={y=>y+'년'} tick={{ fontSize:11 }} />
+              <YAxis tick={{ fontSize:11 }} allowDecimals={false} />
+              <Tooltip formatter={v=>[v+'건','불량']} labelFormatter={l=>l+'년'} />
+              <Bar dataKey="sTotal" name="불량" radius={[6,6,0,0]} maxBarSize={56}
+                label={{ position:'top', fontSize:12, fontWeight:700, formatter:v=>v+'건' }}>
+                {yearStats.map((_,i)=><Cell key={i} fill={i===yearStats.length-1?'#f59e0b':BAR_C[i%BAR_C.length]}/>)}
+              </Bar>
+            </BarChart>
+          </ResponsiveContainer>
+        </div>
+      </div>
+
+      {/* 종결률 + 불량률 추이 */}
+      <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:12 }}>
+        <div className="card" style={{ padding:'18px 20px' }}>
+          <SectionTitle icon="✅" title="연도별 종결률 추이" />
+          <ResponsiveContainer width="100%" height={180}>
+            <LineChart data={yearStats} margin={{ top:4, right:20, left:-8, bottom:0 }}>
+              <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
+              <XAxis dataKey="year" tickFormatter={y=>y+'년'} tick={{ fontSize:11 }} />
+              <YAxis domain={[0,100]} tickFormatter={v=>v+'%'} tick={{ fontSize:11 }} />
+              <Tooltip formatter={v=>[v+'%','종결률']} labelFormatter={l=>l+'년'} />
+              <Line type="monotone" dataKey="closeRate" stroke={GREEN} strokeWidth={2.5}
+                dot={{ r:5, fill:GREEN, stroke:'#fff', strokeWidth:2 }}
+                label={{ position:'top', fontSize:11, fontWeight:700, fill:GREEN, formatter:v=>v+'%' }} />
+            </LineChart>
+          </ResponsiveContainer>
+        </div>
+
+        <div className="card" style={{ padding:'18px 20px' }}>
+          <SectionTitle icon="📉" title="연도별 불량률 추이" />
+          <ResponsiveContainer width="100%" height={180}>
+            <LineChart data={yearStats} margin={{ top:4, right:20, left:-8, bottom:0 }}>
+              <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
+              <XAxis dataKey="year" tickFormatter={y=>y+'년'} tick={{ fontSize:11 }} />
+              <YAxis tickFormatter={v=>v+'%'} tick={{ fontSize:11 }} />
+              <Tooltip formatter={v=>[v+'%','불량률']} labelFormatter={l=>l+'년'} />
+              <Line type="monotone" dataKey="defRate" stroke={AMBER} strokeWidth={2.5}
+                dot={(props) => {
+                  const { cx, cy, payload } = props;
+                  const color = payload.defRate > 3 ? RED : payload.defRate > 1 ? AMBER : GREEN;
+                  return <circle key={payload.year} cx={cx} cy={cy} r={5} fill={color} stroke="#fff" strokeWidth={2}/>;
+                }}
+                label={{ position:'top', fontSize:11, fontWeight:700, fill:AMBER, formatter:v=>v+'%' }} />
+            </LineChart>
+          </ResponsiveContainer>
+        </div>
+      </div>
+
+      {/* 연도별 핵심 지표 비교 테이블 */}
+      <div className="card" style={{ padding:'18px 20px' }}>
+        <SectionTitle icon="📋" title="연도별 핵심 지표 비교" />
+        <div style={{ overflowX:'auto' }}>
+          <table style={{ width:'100%', borderCollapse:'collapse', fontSize:13 }}>
+            <thead>
+              <tr style={{ borderBottom:'2px solid #e2e8f0' }}>
+                <th style={{ padding:'10px 12px', textAlign:'left', color:'#64748b', fontWeight:600, fontSize:12, whiteSpace:'nowrap' }}>지표</th>
+                {yearStats.map(y=>(
+                  <th key={y.year} style={{ padding:'10px 16px', textAlign:'center', color:'#1e293b', fontWeight:700, whiteSpace:'nowrap' }}>{y.year}년</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {[
+                { label:'고객사 클레임', render:(y,p)=><div><span style={{fontWeight:700,fontSize:15}}>{y.cTotal}건</span><div style={{marginTop:2}}><DeltaBadge curr={y} prev={p} _key="cTotal" inverse key="cTotal" /></div></div> },
+                { label:'종결률', render:(y,p)=><div><span style={{fontWeight:700,color:y.closeRate>=70?GREEN:y.closeRate>=50?AMBER:RED}}>{y.closeRate}%</span><div style={{marginTop:2}}><DeltaBadge curr={y} prev={p} _key="closeRate" unit="%" key="closeRate" /></div></div> },
+                { label:'공급사 불량', render:(y,p)=><div><span style={{fontWeight:700}}>{y.sTotal}건</span><div style={{marginTop:2}}><DeltaBadge curr={y} prev={p} _key="sTotal" inverse key="sTotal" /></div></div> },
+                { label:'전체 불량률', render:(y,p)=><div><span style={{fontWeight:700,color:y.defRate>3?RED:y.defRate>1?AMBER:GREEN}}>{y.defRate}%</span><div style={{marginTop:2}}><DeltaBadge curr={y} prev={p} _key="defRate" unit="%" inverse key="defRate" /></div></div> },
+                { label:'시정조치 완료율', render:(y)=><span style={{color:y.sDoneRate>=70?GREEN:y.sDoneRate>=40?AMBER:RED,fontWeight:700}}>{y.sDoneRate}%</span> },
+                { label:'주요 고객사', render:(y)=>y.topCustomer?<span style={{color:'#1d4ed8',fontWeight:600}}>{y.topCustomer[0]} <span style={{color:'#94a3b8',fontWeight:400}}>({y.topCustomer[1]}건)</span></span>:<span style={{color:'#94a3b8'}}>—</span> },
+                { label:'주요 공급사', render:(y)=>y.topSupplier?<span>{y.topSupplier[0]} <span style={{color:'#94a3b8'}}>({y.topSupplier[1]}건)</span></span>:<span style={{color:'#94a3b8'}}>—</span> },
+                { label:'주요 원인', render:(y)=>y.topCause?<span style={{color:PURPLE}}>{y.topCause[0]} <span style={{color:'#94a3b8'}}>({y.topCause[1]}건)</span></span>:<span style={{color:'#94a3b8'}}>—</span> },
+              ].map(({ label, render }, ri) => (
+                <tr key={label} style={{ borderBottom:'1px solid #f1f5f9', background:ri%2===0?'#fff':'#fafafa' }}>
+                  <td style={{ padding:'10px 12px', color:'#64748b', fontWeight:600, fontSize:12, whiteSpace:'nowrap' }}>{label}</td>
+                  {yearStats.map((y,i)=>(
+                    <td key={y.year} style={{ padding:'10px 16px', textAlign:'center', verticalAlign:'middle' }}>
+                      {render(y, yearStats[i-1])}
+                    </td>
+                  ))}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      {/* 전년도 대비 YoY */}
+      {yearStats.length >= 2 && (() => {
+        const curr = yearStats[yearStats.length - 1];
+        const prev = yearStats[yearStats.length - 2];
+        const items = [
+          { label:'고객사 클레임', d: curr.cTotal - prev.cTotal, unit:'건', inverse:true, curr:curr.cTotal, prev:prev.cTotal },
+          { label:'종결률', d: curr.closeRate - prev.closeRate, unit:'%p', inverse:false, curr:curr.closeRate+'%', prev:prev.closeRate+'%' },
+          { label:'공급사 불량', d: curr.sTotal - prev.sTotal, unit:'건', inverse:true, curr:curr.sTotal, prev:prev.sTotal },
+          { label:'불량률', d: curr.defRate - prev.defRate, unit:'%p', inverse:true, curr:curr.defRate+'%', prev:prev.defRate+'%' },
+        ];
+        return (
+          <div className="card" style={{ padding:'18px 20px', background:'#f8fafc' }}>
+            <SectionTitle icon="💡" title={`전년도 대비 요약 (${prev.year} → ${curr.year})`} />
+            <div style={{ display:'flex', flexWrap:'wrap', gap:12 }}>
+              {items.map(({ label, d, unit, inverse, curr: cv, prev: pv }) => {
+                const good = inverse ? d <= 0 : d >= 0;
+                const neutral = d === 0;
+                return (
+                  <div key={label} style={{
+                    flex:'1 1 200px', padding:'12px 16px', borderRadius:8,
+                    background: neutral?'#f8fafc':good?'#f0fdf4':'#fef2f2',
+                    border:`1px solid ${neutral?'#e2e8f0':good?'#bbf7d0':'#fecaca'}`,
+                    borderLeft:`4px solid ${neutral?'#94a3b8':good?GREEN:RED}`,
+                  }}>
+                    <div style={{ fontSize:11, fontWeight:700, color:'#64748b', marginBottom:4 }}>{label}</div>
+                    <div style={{ fontSize:14, fontWeight:700, color:neutral?'#94a3b8':good?GREEN:RED }}>
+                      {d === 0 ? '±0' : (d > 0 ? '▲ +' : '▼ ')}{Math.abs(d)}{unit}
+                    </div>
+                    <div style={{ fontSize:11, color:'#94a3b8', marginTop:3 }}>{pv} → {cv}</div>
+                  </div>
+                );
+              })}
+            </div>
           </div>
-        </div>
-      )}
-
-      {!report && !generating && !error && total === 0 && start && end && (
-        <div className="empty">
-          <div className="empty-icon">📊</div>
-          선택한 기간({start} ~ {end})에 데이터가 없습니다
-        </div>
-      )}
+        );
+      })()}
     </div>
   );
 }
