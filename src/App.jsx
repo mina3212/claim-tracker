@@ -4,7 +4,6 @@ import { ToastProvider }  from './context/ToastContext';
 import { ClaimsProvider } from './context/ClaimsContext';
 import { SupplierClaimsProvider } from './context/SupplierClaimsContext';
 import { PrintProvider }  from './context/PrintContext';
-import { canViewSupplierClaims } from './lib/supabase';
 import Layout             from './components/Layout';
 import LoginGate          from './components/LoginGate';
 import PasswordResetPage  from './components/PasswordResetPage';
@@ -24,17 +23,16 @@ import AnalysisReport      from './pages/AnalysisReport';
 import SupplierAnalytics   from './pages/SupplierAnalytics';
 import UserAdmin           from './pages/UserAdmin';
 
-function SupplierGuard({ children }) {
-  const { profile } = useAuth();
-  if (!canViewSupplierClaims(profile?.department, profile?.is_admin)) {
-    return <Navigate to="/" replace />;
-  }
+function PermGuard({ perm, children }) {
+  const { canDo, loading } = useAuth();
+  if (loading) return null;
+  if (!canDo(perm)) return <Navigate to="/" replace />;
   return children;
 }
 
 function AdminGuard({ children }) {
-  const { profile } = useAuth();
-  if (!profile?.is_admin) return <Navigate to="/" replace />;
+  const { isAdmin } = useAuth();
+  if (!isAdmin) return <Navigate to="/" replace />;
   return children;
 }
 
@@ -67,20 +65,20 @@ function AppRoutes() {
           <Routes>
             <Route path="/" element={<Layout />}>
               <Route index element={<Dashboard />} />
-              <Route path="claims" element={<ClaimList />} />
-              <Route path="claims/new" element={<NewClaim />} />
-              <Route path="claims/:id" element={<ClaimDetail />} />
-              <Route path="claims/:id/report" element={<ClaimReport />} />
+              <Route path="claims" element={<PermGuard perm="customer_read"><ClaimList /></PermGuard>} />
+              <Route path="claims/new" element={<PermGuard perm="customer_write"><NewClaim /></PermGuard>} />
+              <Route path="claims/:id" element={<PermGuard perm="customer_read"><ClaimDetail /></PermGuard>} />
+              <Route path="claims/:id/report" element={<PermGuard perm="customer_read"><ClaimReport /></PermGuard>} />
               <Route path="manual" element={<UserManual />} />
-              <Route path="analytics" element={<Analytics />} />
-              <Route path="parts" element={<Parts />} />
-              <Route path="supplier-claims" element={<SupplierGuard><SupplierClaimList /></SupplierGuard>} />
-              <Route path="supplier-claims/new" element={<SupplierGuard><NewSupplierClaim /></SupplierGuard>} />
-              <Route path="supplier-claims/:id" element={<SupplierGuard><SupplierClaimDetail /></SupplierGuard>} />
+              <Route path="analytics" element={<PermGuard perm="customer_analytics"><Analytics /></PermGuard>} />
+              <Route path="parts" element={<AdminGuard><Parts /></AdminGuard>} />
+              <Route path="supplier-claims" element={<PermGuard perm="supplier_read"><SupplierClaimList /></PermGuard>} />
+              <Route path="supplier-claims/new" element={<PermGuard perm="supplier_write"><NewSupplierClaim /></PermGuard>} />
+              <Route path="supplier-claims/:id" element={<PermGuard perm="supplier_read"><SupplierClaimDetail /></PermGuard>} />
               <Route path="suppliers" element={<AdminGuard><Suppliers /></AdminGuard>} />
               <Route path="admin/users" element={<AdminGuard><UserAdmin /></AdminGuard>} />
-              <Route path="supplier-analytics" element={<SupplierGuard><SupplierAnalytics /></SupplierGuard>} />
-              <Route path="analysis" element={<SupplierGuard><AnalysisReport /></SupplierGuard>} />
+              <Route path="supplier-analytics" element={<PermGuard perm="supplier_analytics"><SupplierAnalytics /></PermGuard>} />
+              <Route path="analysis" element={<PermGuard perm="report"><AnalysisReport /></PermGuard>} />
               <Route path="*" element={<Navigate to="/" replace />} />
             </Route>
           </Routes>

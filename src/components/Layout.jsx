@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Outlet, NavLink, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { signOut, canViewSupplierClaims } from '../lib/supabase';
+import { signOut } from '../lib/supabase';
 import { useToast } from '../context/ToastContext';
 import { usePresence } from '../hooks/usePresence';
 import { usePrintTitle } from '../context/PrintContext';
@@ -18,8 +18,8 @@ const DEPT_COLORS = {
 const printDate = new Date().toLocaleDateString('ko-KR', { year: 'numeric', month: 'long', day: 'numeric' });
 
 export default function Layout() {
-  const { user, displayName, department, isAdmin, saveName, profile } = useAuth();
-  const showSupplier = canViewSupplierClaims(department, isAdmin);
+  const { user, displayName, department, isAdmin, saveName, canDo } = useAuth();
+  const showSupplier = canDo('supplier_read');
   const { printTitle } = usePrintTitle();
   const toast = useToast();
   const navigate = useNavigate();
@@ -95,20 +95,28 @@ export default function Layout() {
           </NavLink>
 
           {/* 고객사 클레임 섹션 */}
-          <div style={{ fontSize: 10, color: '#94a3b8', fontWeight: 700, letterSpacing: .8, padding: '10px 14px 4px', textTransform: 'uppercase' }}>
-            고객사 클레임
-          </div>
-          <NavLink to="/claims" className={({ isActive }) => `nav-item${isActive ? ' active' : ''}`}>
-            <span>📋</span> 클레임 목록
-          </NavLink>
-          <NavLink to="/claims/new" className={({ isActive }) => `nav-item${isActive ? ' active' : ''}`}>
-            <span>➕</span> 클레임 접수
-          </NavLink>
-          <NavLink to="/analytics" className={({ isActive }) => `nav-item${isActive ? ' active' : ''}`}>
-            <span>📊</span> 누적 분석
-          </NavLink>
+          {canDo('customer_read') && (
+            <>
+              <div style={{ fontSize: 10, color: '#94a3b8', fontWeight: 700, letterSpacing: .8, padding: '10px 14px 4px', textTransform: 'uppercase' }}>
+                고객사 클레임
+              </div>
+              <NavLink to="/claims" className={({ isActive }) => `nav-item${isActive ? ' active' : ''}`}>
+                <span>📋</span> 클레임 목록
+              </NavLink>
+              {canDo('customer_write') && (
+                <NavLink to="/claims/new" className={({ isActive }) => `nav-item${isActive ? ' active' : ''}`}>
+                  <span>➕</span> 클레임 접수
+                </NavLink>
+              )}
+              {canDo('customer_analytics') && (
+                <NavLink to="/analytics" className={({ isActive }) => `nav-item${isActive ? ' active' : ''}`}>
+                  <span>📊</span> 누적 분석
+                </NavLink>
+              )}
+            </>
+          )}
 
-          {/* 공급사 불량 섹션 (품질기술팀 + 관리자만) */}
+          {/* 공급사 불량 섹션 */}
           {showSupplier && (
             <>
               <div style={{ fontSize: 10, color: '#94a3b8', fontWeight: 700, letterSpacing: .8, padding: '10px 14px 4px', textTransform: 'uppercase' }}>
@@ -117,13 +125,22 @@ export default function Layout() {
               <NavLink to="/supplier-claims" className={({ isActive }) => `nav-item${isActive ? ' active' : ''}`}>
                 <span>📋</span> 불량 목록
               </NavLink>
-              <NavLink to="/supplier-claims/new" className={({ isActive }) => `nav-item${isActive ? ' active' : ''}`}>
-                <span>➕</span> 불량 접수
-              </NavLink>
-              <NavLink to="/supplier-analytics" className={({ isActive }) => `nav-item${isActive ? ' active' : ''}`}>
-                <span>📊</span> 누적 분석
-              </NavLink>
+              {canDo('supplier_write') && (
+                <NavLink to="/supplier-claims/new" className={({ isActive }) => `nav-item${isActive ? ' active' : ''}`}>
+                  <span>➕</span> 불량 접수
+                </NavLink>
+              )}
+              {canDo('supplier_analytics') && (
+                <NavLink to="/supplier-analytics" className={({ isActive }) => `nav-item${isActive ? ' active' : ''}`}>
+                  <span>📊</span> 누적 분석
+                </NavLink>
+              )}
+            </>
+          )}
 
+          {/* 종합 보고서 */}
+          {canDo('report') && (
+            <>
               <div style={{ fontSize: 10, color: '#94a3b8', fontWeight: 700, letterSpacing: .8, padding: '10px 14px 4px', textTransform: 'uppercase' }}>
                 종합 보고서
               </div>

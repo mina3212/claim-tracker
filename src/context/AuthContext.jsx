@@ -1,45 +1,48 @@
-import { createContext, useContext, useState, useEffect, useCallback } from 'react';
-import { sb, getProfile, upsertProfile, syncProfileEmail } from '../lib/supabase';
+import { createContext, useContext, useState, useEffect, useCallback, useMemo } from 'react';
+import { resolvePermissions } from '../lib/permissions';
 
 const AuthCtx = createContext(null);
 
 export function AuthProvider({ children }) {
-  const [user,               setUser]               = useState(null);
-  const [profile,            setProfile]            = useState(null);
-  const [loading,            setLoading]            = useState(true);
-  const [isPasswordRecovery, setIsPasswordRecovery] = useState(false);
+  const [user,    setUser]    = useState(null);
+  const [profile, setProfile] = useState(null);
+  const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    // Portal SSO: 세션 정보를 /auth/me 로 확인
-    sb.auth.getSession().then(({ data: { session } }) => {
-      const u = session?.user ?? null;
-      setUser(u);
-      if (u) loadProfile(u.id, u.email).finally(() => setLoading(false));
-      else setLoading(false);
-    });
-
-    const { data: { subscription } } = sb.auth.onAuthStateChange((event, session) => {
-      const u = session?.user ?? null;
-      setUser(u);
-      if (u) loadProfile(u.id, u.email);
-      else setProfile(null);
-    });
-    return () => subscription.unsubscribe();
-  }, []);
-
-  async function loadProfile(userId, email) {
+  const loadProfile = useCallback(async (userId, email) => {
     try {
-      const p = await getProfile(userId);
+      const res = await fetch(`/api/profiles/${encodeURIComponent(userId)}`);
+      const p   = res.ok ? await res.json() : null;
       setProfile(p ?? null);
-      if (email) syncProfileEmail(userId, email).catch(() => {});
+      if (email && p && !p.email) {
+        fetch(`/api/profiles/${encodeURIComponent(userId)}/email`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email }),
+        }).catch(() => {});
+      }
     } catch {
       setProfile(null);
     }
-  }
+  }, []);
+
+  useEffect(() => {
+    fetch('/auth/me', { credentials: 'include' })
+      .then(r => r.ok ? r.json() : null)
+      .then(u => {
+        setUser(u);
+        if (u) return loadProfile(u.id, u.email);
+      })
+      .catch(() => {})
+      .finally(() => setLoading(false));
+  }, [loadProfile]);
 
   const saveName = useCallback(async (name) => {
     if (!user) return;
-    await upsertProfile(user.id, name, profile?.department);
+    await fetch('/api/profiles', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id: user.id, name, department: profile?.department, email: user.email }),
+    });
     setProfile(prev => ({ ...(prev ?? {}), name }));
   }, [user, profile]);
 
@@ -47,11 +50,14 @@ export function AuthProvider({ children }) {
   const isAdmin     = profile?.is_admin === true;
   const department  = profile?.department || '';
 
+  const permissions = useMemo(() => resolvePermissions(profile), [profile]);
+  const canDo = useCallback((key) => !!permissions[key], [permissions]);
+
   return (
     <AuthCtx.Provider value={{
       user, profile, loading, displayName, isAdmin, department, saveName,
+      permissions, canDo,
       reloadProfile: () => user && loadProfile(user.id, user.email),
-      isPasswordRecovery, setIsPasswordRecovery,
     }}>
       {children}
     </AuthCtx.Provider>

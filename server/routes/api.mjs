@@ -88,21 +88,20 @@ router.patch('/profiles/:id/email', async (req, res) => {
 
 router.get('/admin/users', requireAdmin, async (req, res) => {
   try {
-    const rows = await q('SELECT id, name, email, department, is_admin FROM profiles ORDER BY name');
+    const rows = await q('SELECT id, name, email, department, is_admin, permissions FROM profiles ORDER BY name');
     res.json(rows);
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
 router.patch('/admin/users/:id', requireAdmin, async (req, res) => {
   try {
-    const { department, is_admin } = req.body;
-    // 자기 자신의 is_admin은 변경 불가 (관리자 잠금 방지)
+    const { department, is_admin, permissions } = req.body;
     if (req.params.id === req.session.user?.email && is_admin === false) {
       return res.status(400).json({ error: '자신의 관리자 권한은 해제할 수 없습니다' });
     }
     await run(
-      'UPDATE profiles SET department = $1, is_admin = $2 WHERE id = $3',
-      [department || null, !!is_admin, req.params.id]
+      'UPDATE profiles SET department = $1, is_admin = $2, permissions = $3 WHERE id = $4',
+      [department || null, !!is_admin, permissions ? JSON.stringify(permissions) : null, req.params.id]
     );
     res.json({ ok: true });
   } catch (e) { res.status(500).json({ error: e.message }); }
