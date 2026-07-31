@@ -23,10 +23,11 @@ import AnalysisReport      from './pages/AnalysisReport';
 import SupplierAnalytics   from './pages/SupplierAnalytics';
 import UserAdmin           from './pages/UserAdmin';
 
-function PermGuard({ perm, children }) {
+function PermGuard({ perm, any: anyPerms, children }) {
   const { canDo, loading } = useAuth();
   if (loading) return null;
-  if (!canDo(perm)) return <Navigate to="/" replace />;
+  const ok = anyPerms ? anyPerms.some(p => canDo(p)) : canDo(perm);
+  if (!ok) return <Navigate to="/" replace />;
   return children;
 }
 
@@ -65,10 +66,10 @@ function AppRoutes() {
           <Routes>
             <Route path="/" element={<Layout />}>
               <Route index element={<Dashboard />} />
-              <Route path="claims" element={<PermGuard perm="customer_read"><ClaimList /></PermGuard>} />
-              <Route path="claims/new" element={<PermGuard perm="customer_write"><NewClaim /></PermGuard>} />
-              <Route path="claims/:id" element={<PermGuard perm="customer_read"><ClaimDetail /></PermGuard>} />
-              <Route path="claims/:id/report" element={<PermGuard perm="customer_read"><ClaimReport /></PermGuard>} />
+              <Route path="claims" element={<PermGuard any={['customer_domestic_read','customer_overseas_read']}><ClaimList /></PermGuard>} />
+              <Route path="claims/new" element={<PermGuard any={['customer_domestic_write','customer_overseas_write']}><NewClaim /></PermGuard>} />
+              <Route path="claims/:id" element={<PermGuard any={['customer_domestic_read','customer_overseas_read']}><ClaimDetail /></PermGuard>} />
+              <Route path="claims/:id/report" element={<PermGuard any={['customer_domestic_read','customer_overseas_read']}><ClaimReport /></PermGuard>} />
               <Route path="manual" element={<UserManual />} />
               <Route path="analytics" element={<PermGuard perm="customer_analytics"><Analytics /></PermGuard>} />
               <Route path="parts" element={<AdminGuard><Parts /></AdminGuard>} />

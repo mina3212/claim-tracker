@@ -37,7 +37,7 @@ import { usePrintTitle } from '../context/PrintContext';
 
 export default function ClaimList() {
   const { claims, loading, stages, removeClaim, deleteRequests, addDeleteRequest } = useClaims();
-  const { user, isAdmin, department } = useAuth();
+  const { user, isAdmin, department, canDo } = useAuth();
   const toast    = useToast();
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -92,20 +92,23 @@ export default function ClaimList() {
   // 기타(상세내용) → 기타
   const displayCause = (cause) => cause.startsWith('기타') ? '기타' : cause;
 
-  // 부서별 접근 범위: 마케팅팀 = 해외만 / 영업·영업관리 = 해외 제외 / 나머지(품질기술팀·관리자) = 전체
-  const deptFilter = useMemo(() => {
-    if (isAdmin || department === '품질기술팀') return 'all';
-    if (department === '마케팅팀') return 'overseas';
-    if (department === '영업팀' || department === '영업관리팀') return 'domestic';
-    return 'all';
-  }, [isAdmin, department]);
+  // 권한 기반 접근 범위
+  const claimScope = useMemo(() => {
+    const hasDomestic = canDo('customer_domestic_read');
+    const hasOverseas = canDo('customer_overseas_read');
+    if (hasDomestic && hasOverseas) return 'all';
+    if (hasDomestic) return 'domestic';
+    if (hasOverseas) return 'overseas';
+    return 'none';
+  }, [canDo]);
 
   const filtered = useMemo(() => {
     const q = search.toLowerCase().trim();
     return claims
       .filter(c => {
-        if (deptFilter === 'overseas' && c.customer_group !== '해외고객사') return false;
-        if (deptFilter === 'domestic' && c.customer_group === '해외고객사') return false;
+        if (claimScope === 'none') return false;
+        if (claimScope === 'overseas' && c.customer_group !== '해외고객사') return false;
+        if (claimScope === 'domestic' && c.customer_group === '해외고객사') return false;
         if (stageFilter !== 'all' && c.current_stage !== stageFilter) return false;
         if (customerFilter !== 'all' && c.customer_name !== customerFilter) return false;
         if (q) {
@@ -115,7 +118,7 @@ export default function ClaimList() {
         return true;
       })
       .sort((a, b) => (b.receipt_date || b.created_at || '') > (a.receipt_date || a.created_at || '') ? 1 : -1);
-  }, [claims, search, stageFilter, customerFilter, deptFilter]);
+  }, [claims, search, stageFilter, customerFilter, claimScope]);
 
   const pendingIds = useMemo(() =>
     new Set(deleteRequests.map(r => r.claim_id)),

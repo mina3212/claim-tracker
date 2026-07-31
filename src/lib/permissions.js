@@ -1,10 +1,22 @@
 export const PERM_SECTIONS = [
   {
-    section: '고객사 클레임',
+    section: '고객사 클레임 (국내)',
     perms: [
-      { key: 'customer_read',      label: '조회' },
-      { key: 'customer_write',     label: '접수·수정' },
-      { key: 'customer_analytics', label: '누적 분석' },
+      { key: 'customer_domestic_read',  label: '조회' },
+      { key: 'customer_domestic_write', label: '접수·수정' },
+    ],
+  },
+  {
+    section: '고객사 클레임 (해외)',
+    perms: [
+      { key: 'customer_overseas_read',  label: '조회' },
+      { key: 'customer_overseas_write', label: '접수·수정' },
+    ],
+  },
+  {
+    section: '분석',
+    perms: [
+      { key: 'customer_analytics', label: '고객사 분석' },
     ],
   },
   {
@@ -28,11 +40,11 @@ export const ALL_PERM_KEYS = PERM_SECTIONS.flatMap(s => s.perms.map(p => p.key))
 const ALL_ON  = Object.fromEntries(ALL_PERM_KEYS.map(k => [k, true]));
 const ALL_OFF = Object.fromEntries(ALL_PERM_KEYS.map(k => [k, false]));
 
-// 부서 기반 기본값 (permissions 컬럼이 없는 기존 사용자용 fallback)
+// 부서 기반 기본값 (permissions 컬럼이 없는 기존 사용자 fallback)
 const DEPT_DEFAULTS = {
-  '영업팀':    { customer_read: true, customer_write: true, customer_analytics: true },
-  '마케팅팀':  { customer_read: true, customer_write: true, customer_analytics: true },
-  '영업관리팀': { customer_read: true, customer_write: true, customer_analytics: true },
+  '영업팀':    { customer_domestic_read: true, customer_domestic_write: true, customer_analytics: true },
+  '마케팅팀':  { customer_overseas_read: true, customer_overseas_write: true, customer_analytics: true },
+  '영업관리팀': { customer_domestic_read: true, customer_domestic_write: true, customer_analytics: true },
   '품질기술팀': { ...ALL_ON },
 };
 
@@ -46,5 +58,5 @@ export function resolvePermissions(profile) {
   }
 
   // 미설정이면 부서 기본값 적용
-  return { ...ALL_OFF, ...(DEPT_DEFAULTS[profile.department] ?? { customer_read: true, customer_write: true, customer_analytics: true }) };
+  return { ...ALL_OFF, ...(DEPT_DEFAULTS[profile.department] ?? { customer_domestic_read: true, customer_domestic_write: true, customer_analytics: true }) };
 }

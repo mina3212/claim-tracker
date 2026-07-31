@@ -19,7 +19,9 @@ const printDate = new Date().toLocaleDateString('ko-KR', { year: 'numeric', mont
 
 export default function Layout() {
   const { user, displayName, department, isAdmin, saveName, canDo } = useAuth();
-  const showSupplier = canDo('supplier_read');
+  const showSupplier   = canDo('supplier_read');
+  const showCustomer   = canDo('customer_domestic_read') || canDo('customer_overseas_read');
+  const showNewClaim   = canDo('customer_domestic_write') || canDo('customer_overseas_write');
   const { printTitle } = usePrintTitle();
   const toast = useToast();
   const navigate = useNavigate();
@@ -95,7 +97,7 @@ export default function Layout() {
           </NavLink>
 
           {/* 고객사 클레임 섹션 */}
-          {canDo('customer_read') && (
+          {showCustomer && (
             <>
               <div style={{ fontSize: 10, color: '#94a3b8', fontWeight: 700, letterSpacing: .8, padding: '10px 14px 4px', textTransform: 'uppercase' }}>
                 고객사 클레임
@@ -103,7 +105,7 @@ export default function Layout() {
               <NavLink to="/claims" className={({ isActive }) => `nav-item${isActive ? ' active' : ''}`}>
                 <span>📋</span> 클레임 목록
               </NavLink>
-              {canDo('customer_write') && (
+              {showNewClaim && (
                 <NavLink to="/claims/new" className={({ isActive }) => `nav-item${isActive ? ' active' : ''}`}>
                   <span>➕</span> 클레임 접수
                 </NavLink>
