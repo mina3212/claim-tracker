@@ -22,6 +22,7 @@ import NewSupplierClaim    from './pages/NewSupplierClaim';
 import Suppliers           from './pages/Suppliers';
 import AnalysisReport      from './pages/AnalysisReport';
 import SupplierAnalytics   from './pages/SupplierAnalytics';
+import UserAdmin           from './pages/UserAdmin';
 
 function SupplierGuard({ children }) {
   const { profile } = useAuth();
@@ -77,6 +78,7 @@ function AppRoutes() {
               <Route path="supplier-claims/new" element={<SupplierGuard><NewSupplierClaim /></SupplierGuard>} />
               <Route path="supplier-claims/:id" element={<SupplierGuard><SupplierClaimDetail /></SupplierGuard>} />
               <Route path="suppliers" element={<AdminGuard><Suppliers /></AdminGuard>} />
+              <Route path="admin/users" element={<AdminGuard><UserAdmin /></AdminGuard>} />
               <Route path="supplier-analytics" element={<SupplierGuard><SupplierAnalytics /></SupplierGuard>} />
               <Route path="analysis" element={<SupplierGuard><AnalysisReport /></SupplierGuard>} />
               <Route path="*" element={<Navigate to="/" replace />} />

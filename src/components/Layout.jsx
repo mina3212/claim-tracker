@@ -148,6 +148,11 @@ export default function Layout() {
               <span>🏢</span> 거래처 관리
             </NavLink>
           )}
+          {isAdmin && (
+            <NavLink to="/admin/users" className={({ isActive }) => `nav-item${isActive ? ' active' : ''}`}>
+              <span>👥</span> 사용자 관리
+            </NavLink>
+          )}
         </nav>
 
         {/* 접속자 현황 (관리자 전용) */}
