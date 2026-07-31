@@ -2,8 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
 import { PERM_SECTIONS, ALL_PERM_KEYS, resolvePermissions } from '../lib/permissions';
-
-const DEPARTMENTS = ['영업팀', '마케팅팀', '영업관리팀', '품질기술팀', '경영지원팀', '개발팀', '생산팀'];
+import { DEPARTMENTS } from '../lib/supabase';
 
 const DEPT_COLORS = {
   '영업팀':    { bg: '#dbeafe', text: '#1e40af' },
