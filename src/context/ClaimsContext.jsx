@@ -13,9 +13,10 @@ export function ClaimsProvider({ children }) {
   const [dbReady,        setDbReady]        = useState(true);
   const [notifications,  setNotifications]  = useState([]);
   const prevClaimIdsRef = useRef(new Set());
+  const isFirstLoadRef  = useRef(true);
 
   const refresh = useCallback(async () => {
-    setLoading(true);
+    if (isFirstLoadRef.current) setLoading(true);
     try {
       const [c, s] = await Promise.all([fetchClaims(), fetchAllStages()]);
 
@@ -34,6 +35,7 @@ export function ClaimsProvider({ children }) {
       console.error('데이터 로드 실패:', e);
     } finally {
       setLoading(false);
+      isFirstLoadRef.current = false;
     }
     try {
       const dr = await fetchDeleteRequests();

@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, useEffect, useCallback } from 'react';
+import { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
 import { fetchSupplierClaims, fetchAllSupplierStages, fetchImprovementLogs, fetchClaimIdsWithFiles } from '../lib/supabase';
 
 const SupplierClaimsCtx = createContext(null);
@@ -10,9 +10,10 @@ export function SupplierClaimsProvider({ children }) {
   const [fileClaimIds,     setFileClaimIds]     = useState(new Set());
   const [loading, setLoading] = useState(true);
   const [dbReady, setDbReady] = useState(true);
+  const isFirstLoadRef = useRef(true);
 
   const refresh = useCallback(async () => {
-    setLoading(true);
+    if (isFirstLoadRef.current) setLoading(true);
     try {
       const [c, s, imp, fileIds] = await Promise.all([
         fetchSupplierClaims(),
@@ -30,6 +31,7 @@ export function SupplierClaimsProvider({ children }) {
       console.error('공급사 불량 데이터 로드 실패:', e);
     } finally {
       setLoading(false);
+      isFirstLoadRef.current = false;
     }
   }, []);
 
