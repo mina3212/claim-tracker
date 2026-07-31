@@ -184,8 +184,8 @@ export default function ClaimList() {
           <div className="page-title">클레임 목록</div>
           <div className="page-sub">
             검색결과 {filtered.length}건
-            {deptFilter === 'overseas' && <span style={{ marginLeft: 8, fontSize: 11, padding: '2px 8px', borderRadius: 99, background: '#dbeafe', color: '#1e40af', fontWeight: 600 }}>해외 접수건만</span>}
-            {deptFilter === 'domestic' && <span style={{ marginLeft: 8, fontSize: 11, padding: '2px 8px', borderRadius: 99, background: '#dcfce7', color: '#166534', fontWeight: 600 }}>국내 접수건만</span>}
+            {claimScope === 'overseas' && <span style={{ marginLeft: 8, fontSize: 11, padding: '2px 8px', borderRadius: 99, background: '#dbeafe', color: '#1e40af', fontWeight: 600 }}>해외 접수건만</span>}
+            {claimScope === 'domestic' && <span style={{ marginLeft: 8, fontSize: 11, padding: '2px 8px', borderRadius: 99, background: '#dcfce7', color: '#166534', fontWeight: 600 }}>국내 접수건만</span>}
           </div>
         </div>
         <div style={{ display: 'flex', gap: 8 }}>
