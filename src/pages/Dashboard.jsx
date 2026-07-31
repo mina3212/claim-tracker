@@ -4,7 +4,7 @@ import { useClaims } from '../context/ClaimsContext';
 import { useSupplierClaims } from '../context/SupplierClaimsContext';
 import { useAuth } from '../context/AuthContext';
 import StageBadge from '../components/StageBadge';
-import { STAGES, STAGE_COLORS, STAGE_ICONS, SUPPLIER_STAGES, SUPPLIER_STAGE_COLORS, SUPPLIER_STAGE_ICONS, canViewSupplierClaims } from '../lib/supabase';
+import { STAGES, STAGE_COLORS, STAGE_ICONS, SUPPLIER_STAGES, SUPPLIER_STAGE_COLORS, SUPPLIER_STAGE_ICONS } from '../lib/supabase';
 import { usePrintTitle } from '../context/PrintContext';
 import AnalysisReport from './AnalysisReport';
 
@@ -20,26 +20,20 @@ const MODAL = {
 };
 
 export default function Dashboard() {
-  const { claims, loading, dbReady } = useClaims();
-  const { claims: supplierClaims, loading: supplierLoading } = useSupplierClaims();
-  const { department, isAdmin } = useAuth();
-  const showSupplier = canViewSupplierClaims(department, isAdmin);
+  const { claims, loading, dbReady, refresh } = useClaims();
+  const { claims: supplierClaims, loading: supplierLoading, refresh: refreshSupplier } = useSupplierClaims();
+  const { canDo } = useAuth();
+  const showSupplier = canDo('supplier_read');
   const navigate = useNavigate();
 
-  // ClaimList와 동일한 부서별 접근 범위 필터
-  const deptFilter = useMemo(() => {
-    if (isAdmin || department === '품질기술팀') return 'all';
-    if (department === '마케팅팀') return 'overseas';
-    if (department === '영업팀' || department === '영업관리팀') return 'domestic';
-    return 'all';
-  }, [isAdmin, department]);
-
   const visibleClaims = useMemo(() => {
-    if (deptFilter === 'all') return claims;
-    if (deptFilter === 'overseas') return claims.filter(c => c.customer_group === '해외고객사');
-    if (deptFilter === 'domestic') return claims.filter(c => c.customer_group !== '해외고객사');
-    return claims;
-  }, [claims, deptFilter]);
+    const hasDomestic = canDo('customer_domestic_read');
+    const hasOverseas = canDo('customer_overseas_read');
+    if (hasDomestic && hasOverseas) return claims;
+    if (hasDomestic) return claims.filter(c => c.customer_group !== '해외고객사');
+    if (hasOverseas) return claims.filter(c => c.customer_group === '해외고객사');
+    return [];
+  }, [claims, canDo]);
   const [modal, setModal] = useState(null);
   const [activeTab, setActiveTab] = useState('customer');
 
@@ -125,6 +119,14 @@ export default function Dashboard() {
           <div className="page-sub">{showSupplier ? '고객사 클레임 + 공급사 불량 현황' : '고객사 클레임 전체 현황'}</div>
         </div>
         <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+          <button
+            className="btn btn-ghost btn-sm"
+            onClick={() => { refresh(); refreshSupplier(); }}
+            style={{ fontSize: 12, color: '#64748b', border: '1px solid #e2e8f0' }}
+            title="데이터 새로고침"
+          >
+            🔄 새로고침
+          </button>
           <button
             className="btn btn-ghost btn-sm"
             onClick={() => window.open('/manual', '_blank')}
